@@ -1,0 +1,80 @@
+server:
+  # SECURITY: Default to localhost only. Any change should be carefully
+  # evaluated for network security implications. Only bind to 0.0.0.0
+  # if you have proper firewall rules and understand the risks.
+  host: 127.0.0.1
+  port: 3000
+  provider: openrouter
+
+database:
+  path: ./data/keys.db
+  max_keys: 200
+
+blocking:
+  # Rate limiting for presented keys
+  # Throttles based on the caller's presented key to limit blast radius
+  # of misbehaving callers without affecting other commune participants
+  presented_key_rate_limit_seconds: 2
+
+  # 401 errors: 1440 minute (24 hour) block, 3 strikes = delete
+  auth_failure_block_minutes: 1440
+  auth_failure_delete_threshold: 3
+  
+  # 429 errors: exponential backoff, 10 strikes = delete
+  throttle_backoff_base_minutes: 1
+  throttle_delete_threshold: 10
+  throttle_delete_timespan_minutes: 1440
+
+stats:
+  # Number of days to keep daily statistics before cleanup
+  retention_days: 15
+  # How often to run automatic cleanup (in minutes)
+  cleanup_interval_minutes: 60
+  # Enable automatic cleanup
+  auto_cleanup: true
+  # Cache expiry for load balancer data (available keys + stats) in seconds
+  cache_expiry_seconds: 60
+
+logging:
+  level: info
+  key_display:
+    prefix_length: 4
+    suffix_length: 4
+
+providers:
+  - name: openai
+    base_url: https://api.openai.com
+    timeout_ms: 60000
+    auth_header: Authorization
+    url_patterns:
+      - ^/v1/
+    validation:
+      - type: body-json
+        key: model
+        pattern: ^gpt-
+
+  - name: anthropic
+    base_url: https://api.anthropic.com
+    timeout_ms: 60000
+    auth_header: x-api-key
+    url_patterns:
+      - ^/v1/
+    validation:
+      - type: body-json
+        key: model
+        pattern: ^claude-
+
+  - name: openrouter
+    base_url: https://openrouter.ai/api/v1
+    timeout_ms: 60000
+    auth_header: Authorization
+    url_patterns:
+      - ^/api/
+    validation:
+      min_key_length: 16
+      max_key_length: 256
+      custom_rules:
+        - type: body-json
+          json_key: model
+          #regex: ".+:free$"
+          regex: "minimax/minimax-m2:free" # Decent free model that doesn't throttle with default privacy settings
