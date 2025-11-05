@@ -87,9 +87,9 @@ setup_cron() {
     
     # Setup certbot renewal hook to copy certificates and restart PM2
     # Copy the copy-certificates script verbatim to avoid privilege escalation
-    sudo mkdir -p /etc/letsencrypt/renewal-hooks/post
-    sudo cp "$(dirname "$0")/copy-certificates.sh" /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
-    sudo chmod +x /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
+    mkdir -p /etc/letsencrypt/renewal-hooks/post
+    cp "$(dirname "$0")/copy-certificates.sh" /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
+    chmod +x /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
     
     # Note: Only copy-certificates.sh is in the renewal hooks directory
     # Certbot will automatically execute it with the domain as $1 argument after successful renewal
@@ -106,7 +106,7 @@ setup_cron() {
 create_https_config() {
     log_info "Configuring HTTPS..."
     
-    cat > config/override.yaml << EOF
+    cat > /home/keycommune/key-commune/config/override.yaml << EOF
 ssl:
   enabled: true
   cert_path: /home/keycommune/ssl-certs/fullchain.pem
@@ -116,48 +116,24 @@ server:
   port: 443
 EOF
     
+    # Set proper ownership
+    chown keycommune:keycommune /home/keycommune/key-commune/config/override.yaml
+    
     log_success "HTTPS configuration created"
-}
-
-# Function to create app user
-create_app_user() {
-    log_info "Creating dedicated app user..."
-    
-    # Create app user if it doesn't exist
-    if ! id "keycommune" &>/dev/null; then
-        sudo useradd -r -s /bin/false -d /home/keycommune -m keycommune
-        log_success "Created app user 'keycommune'"
-    else
-        log_info "App user 'keycommune' already exists"
-    fi
-    
-    # Create app directory
-    sudo mkdir -p /home/keycommune
-    sudo chown keycommune:keycommune /home/keycommune
 }
 
 # Function to install dependencies
 install_dependencies() {
-    log_info "Installing dependencies..."
+    log_info "Installing system dependencies..."
     
-    # Update system packages
-    sudo apt update
-    sudo apt upgrade -y
+    # Install required system packages
+    apt update
+    apt install -y nodejs npm certbot curl dnsutils
     
-    # Install required packages
-    sudo apt install -y curl certbot nodejs npm
+    # Install PM2 globally (needed for process management)
+    npm install -g pm2
     
-    # Create logs directory for PM2
-    mkdir -p logs
-    chmod 755 logs
-    
-    # Install Node.js dependencies (production only)
-    npm install --omit=dev
-    
-    # Build the application
-    npm run build
-    
-    log_success "Dependencies installed and application built"
+    log_success "System dependencies installed"
 }
 
 # Function to setup DuckDNS
@@ -186,21 +162,15 @@ setup_ssl() {
         return 0
     fi
     
-    # Stop any service on port 80 temporarily
-    sudo systemctl stop nginx 2>/dev/null || true
-    
     # Run certbot
-    sudo certbot certonly \
+    certbot certonly \
         --standalone \
         --non-interactive \
         --agree-tos \
         --email admin@$DUCKDNS_DOMAIN.duckdns.org \
         -d $DUCKDNS_DOMAIN.duckdns.org
     
-    # Restart nginx if it was running
-    sudo systemctl start nginx 2>/dev/null || true
-    
-    if sudo ls "/etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org" 2>/dev/null; then
+    if ls "/etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org" 2>/dev/null; then
         log_success "SSL certificate obtained successfully"
         copy_certificates
     else
@@ -220,15 +190,15 @@ setup_pm2() {
     log_info "Setting up PM2 process manager for keycommune user..."
     
     # Change to application directory
-    cd "$(dirname "$0")/../.."
+    cd /home/keycommune/key-commune
     log_info "Working directory: $(pwd)"
     
     # Run PM2 installation and setup as keycommune user
-    sudo -u keycommune bash "$(dirname "$0")/install-pm2.sh"
+    sudo -u keycommune bash /home/keycommune/key-commune/deployment/lightsail/install-pm2.sh
     
     # Setup PM2 startup (system-level operation)
     log_info "Setting up PM2 startup..."
-    sudo pm2 startup systemd -u keycommune --hp /home/keycommune | tail -n1 | bash
+    pm2 startup systemd -u keycommune --hp /home/keycommune | tail -n1 | bash
     
     log_success "PM2 configured and application started as keycommune user"
 }
@@ -246,8 +216,8 @@ verify_deployment() {
         exit 1
     fi
     
-    # Check if port 443 is listening
-    if sudo netstat -tlnp | grep -q ":443"; then
+    # Check if port 443 is listening (using ss instead of netstat)
+    if ss -tlnp | grep -q ":443"; then
         log_success "HTTPS server is listening on port 443"
     else
         log_warning "HTTPS server may not be listening on port 443"
@@ -263,34 +233,31 @@ main() {
     check_env_vars
     
     # Navigate to project directory
-    cd "$(dirname "$0")/../.."
+    cd /home/keycommune/key-commune
     log_info "Working directory: $(pwd)"
     
-    # Step 1: Create app user
-    create_app_user
-    
-    # Step 2: Install dependencies
+    # Step 1: Install dependencies
     install_dependencies
     
-    # Step 3: Setup DuckDNS
+    # Step 2: Setup DuckDNS
     setup_duckdns
     
-    # Step 4: Wait for DNS propagation
+    # Step 3: Wait for DNS propagation
     wait_for_dns
     
-    # Step 5: Setup SSL certificate
+    # Step 4: Setup SSL certificate
     setup_ssl
     
-    # Step 6: Create HTTPS configuration
+    # Step 5: Create HTTPS configuration
     create_https_config
     
-    # Step 7: Setup PM2
+    # Step 6: Setup PM2
     setup_pm2
     
-    # Step 8: Setup cron jobs
+    # Step 7: Setup cron jobs
     setup_cron
     
-    # Step 9: Verify deployment
+    # Step 8: Verify deployment
     verify_deployment
     
     echo
@@ -307,7 +274,7 @@ main() {
     echo "  View cron jobs: crontab -l"
     echo
     echo -e "${YELLOW}Automatic updates are now active:${NC}"
-    echo "  • DuckDNS updates every 5 minutes"
+    echo "  • DuckDNS updates every 15 minutes"
     echo "  • SSL renewal checks daily at 3 AM"
     echo "  • Application restarts after SSL renewal"
 }

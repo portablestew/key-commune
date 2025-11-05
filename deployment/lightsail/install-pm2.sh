@@ -7,8 +7,15 @@ set -e
 # Change to application directory
 cd "$(dirname "$0")/../.."
 
-# Install PM2 globally
-npm install -g pm2
+# Create logs directory for PM2 (owned by keycommune user)
+mkdir -p logs
+chmod 755 logs
+
+# Install Node.js dependencies (production only)
+npm install --omit=dev
+
+# Build the application
+npm run build
 
 # Install pm2-logrotate for log management
 pm2 install pm2-logrotate

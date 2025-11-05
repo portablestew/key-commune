@@ -23,7 +23,7 @@ DuckDNS provides free dynamic DNS that automatically updates your IP address. Th
 1. Go to [AWS Lightsail Console](https://lightsail.aws.amazon.com)
 2. Click "Create instance"
 3. Choose platform: **Linux/Unix**
-4. Select blueprint: **OS Only** → **Ubuntu 22.04 LTS**
+4. Select blueprint: **OS Only** → **Ubuntu 24.04 LTS**
 5. Add the optional Launch script (see below)
 6. Choose plan: **$5/month minimum recommended** (for production use)
 7. Name your instance: `key-commune-app`
@@ -37,35 +37,33 @@ DuckDNS provides free dynamic DNS that automatically updates your IP address. Th
 
 ## Section 3: Launch Script
 
+NOTE:
+ - **Substitute correct values** for the environment variables listed below
+ - Paste the script into the "Launch script" when creating the AWS Lightsail
+ - These commands may instead be run on the Lightsail instance via SSH (use the browser-based terminal in the Lightsail console)
+
 ```bash
 # Set your DuckDNS credentials
-export DUCKDNS_DOMAIN=myapp
-export DUCKDNS_TOKEN=abc123def456ghi789
+export DUCKDNS_DOMAIN=[!!! my subdomain name]
+export DUCKDNS_TOKEN=[!!! abc123def456ghi789]
 
-# Download and run setup
-sudo apt update && sudo apt install -y git
-git clone https://github.com/portablestew/key-commune.git
-cd key-commune
-bash ./deployment/lightsail/setup.sh
+# Bootstrap deployment
+sudo apt install -y curl
+curl -sL https://raw.githubusercontent.com/${GITHUB_USERNAME:-portablestew}/key-commune/main/deployment/lightsail/bootstrap.sh | bash
 ```
 
-Note: These commands may also be run on the Lightsail instance via SSH (use the browser-based terminal in the Lightsail console).
-
-### Before running:
-- Replace `myapp` with your actual DuckDNS subdomain
-- Replace `abc123def456ghi789` with your actual DuckDNS token
-- Replace the git repository URL with your actual repository
-
 ### What happens next:
-The setup script will:
-1. Install all dependencies and build the application
-2. Create a dedicated app user for security
-3. Configure DuckDNS to point to your instance
-4. Wait for DNS propagation (may take several minutes)
-5. Obtain a free SSL certificate from Let's Encrypt
-6. Set up automatic certificate renewal with app restart
-7. Configure the application for HTTPS
-8. Start the application with PM2 under the app user
+The bootstrap script will:
+1. System update, upgrade, and install git
+2. Create dedicated keycommune user
+3. Clone repository to /home/keycommune/key-commune/
+4. Install nodejs, npm, certbot, dnsutils
+5. Configure DuckDNS
+6. Wait for DNS propagation
+7. Obtain SSL certificate
+8. Build application
+9. Setup PM2 and automatic restarts
+10. Configure cron jobs for updates and certificate renewal
 
 ### After completion:
 Your API will be available at: `https://yourdomain.duckdns.org`

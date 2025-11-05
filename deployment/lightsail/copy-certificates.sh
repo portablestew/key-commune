@@ -42,15 +42,15 @@ if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
 fi
 
 # Create SSL directory for app user
-sudo mkdir -p /home/keycommune/ssl-certs
+mkdir -p /home/keycommune/ssl-certs
 
 # Copy certificates to app user directory
-sudo cp -r /etc/letsencrypt/live/$DOMAIN/* /home/keycommune/ssl-certs/
+cp -r /etc/letsencrypt/live/$DOMAIN/* /home/keycommune/ssl-certs/
 
 # Set ownership and permissions
-sudo chown -R keycommune:keycommune /home/keycommune/ssl-certs
-sudo chmod 644 /home/keycommune/ssl-certs/*.pem
-sudo chmod 755 /home/keycommune/ssl-certs
+chown -R keycommune:keycommune /home/keycommune/ssl-certs
+chmod 644 /home/keycommune/ssl-certs/*.pem
+chmod 755 /home/keycommune/ssl-certs
 
 log_success "Certificates copied to /home/keycommune/ssl-certs/"
 
