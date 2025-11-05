@@ -85,7 +85,7 @@ To update your running server to the latest key-commune version:
 
 2. Switch to the app user and update code:
    ```bash
-   sudo su - keycommune
+   sudo -u keycommune bash
    cd ~/key-commune
    git pull origin main
    ```

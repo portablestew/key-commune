@@ -75,47 +75,42 @@ npm run build
 
 ### 1. Set Encryption Key
 
-Key Commune requires an encryption key for secure API key storage. You have two options:
-
-**Option A: Environment Variable (Recommended)**
-Create a `.env` file and set the encryption key:
+Key Commune requires an encryption key for secure API key storage. Create a `.env` file and set the encryption key:
 ```bash
 echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" > .env
 ```
 
-**Option B: YAML Configuration**
-Add the encryption key to your `config/default.yaml`:
-```yaml
-encryption_key: "your-64-character-hex-string-here"
+### 2. Configure the application
+
+Key Commune uses a layered configuration approach:
+
+**Default Configuration**: The application loads configuration from `config/default.yaml` which contains default settings and provider configurations.
+
+**Override Configuration**: To customize settings without modifying the defaults, create `config/override.yaml`. This file will be merged with (and override) the defaults.
+
+#### Example: Create a simple override
+
+```bash
+# Copy the example override file
+cp config/override.yaml.example config/override.yaml
 ```
 
-### 2. Configure providers in `config/default.yaml`
+Edit `config/override.yaml` to customize only what you need:
 
 ```yaml
+# Example: Override only the server port
 server:
   port: 3000
-  host: 127.0.0.1
 
-database:
-  path: ./data/keys.db
-
-providers:
-  - name: openai
-    base_url: https://api.openai.com
-    auth_header: Authorization
-    url_patterns:
-      - /v1/*
-    validation:
-      - type: body-json
-        key: model
-        pattern: ^(gpt-4|gpt-4-turbo|gpt-3.5-turbo)
-
-  - name: anthropic
-    base_url: https://api.anthropic.com
-    auth_header: x-api-key
-    url_patterns:
-      - /v1/*
+# Example: Add a custom provider configuration
+# providers:
+#   - name: openai
+#     base_url: https://api.openai.com
+#     auth_header: Authorization
+#     timeout_ms: 60000
 ```
+
+**Note**: It's recommended to keep your customizations in `config/override.yaml` rather than modifying `config/default.yaml`, so you can easily update the application without losing your configuration changes.
 
 ## Usage
 
@@ -249,7 +244,7 @@ See: [deployment/lightsail/README.md]()
 
 ### Free sample
 
-This example was deployed directly via the AWS Lightsail instructions linked above.
+This example was deployed directly via the AWS Lightsail instructions linked above:
 - **[https://keycommune.duckdns.org/]()**
 
 The above endpoint may be used as an OpenAI-compatible API provider. It uses the settings in [config/default.yaml](). As a free sample, it notably only supports calling the "minimax" model on OpenRouter. Any caller may use this endpoint with an OpenRouter API key and automatically participate in the commune. 

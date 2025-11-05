@@ -153,7 +153,7 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
   <h3>Links</h3>
   <ul>
-    <li><a href="https://github.com/portablestew/key-commune">GitHub Repository</a></li>
+    <li><a href="https://github.com/portablestew/key-commune">GitHub Repository</a> - <a href="https://github.com/portablestew/key-commune?tab=readme-ov-file#free-sample">sample</a></li>
     <li><a href="/health">Health Status (JSON)</a></li>
   </ul>
 </body>
