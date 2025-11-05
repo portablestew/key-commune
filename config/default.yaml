@@ -22,7 +22,7 @@ blocking:
   
   # 429 errors: exponential backoff, 10 strikes = delete
   throttle_backoff_base_minutes: 1
-  throttle_delete_threshold: 10
+  throttle_delete_threshold: 15
   throttle_delete_timespan_minutes: 1440
 
 stats:
@@ -77,4 +77,4 @@ providers:
         - type: body-json
           json_key: model
           #regex: ".+:free$"
-          regex: "minimax/minimax-m2:free" # Decent free model that doesn't throttle with default privacy settings
+          regex: "minimax-m2:free$" # Free, good benchmarks, no throttling, privacy-respecting provider

@@ -44,7 +44,7 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
   // Initialize load balancer cache
   const loadBalancerCache = new LoadBalancerCache(keysRepo, statsRepo, config);
-  keysRepo.setLoadBalancerCache(loadBalancerCache);
+  keysRepo.onKeyChange(() => loadBalancerCache.invalidateCache());
 
   // Initialize services
   const loadBalancer = new LoadBalancer();
@@ -142,7 +142,7 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
         }
 
         // Select best key
-        selectedKey = loadBalancer.selectKey(cacheEntry.availableKeys,  cacheEntry.statsMap);
+        selectedKey = loadBalancer.selectKey(cacheEntry.availableKeys, cacheEntry.statsMap, authInfo.presentedKeyHash);
         request.log.info({ selectedKeyId: selectedKey.id }, 'Load balanced key selected');
       }
 

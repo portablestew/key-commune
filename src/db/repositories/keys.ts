@@ -1,10 +1,9 @@
 import Database from 'better-sqlite3';
 import { ApiKey, DbApiKey, dbKeyToApiKey } from '../../types/database.js';
 import { encryptKey, decryptKey } from '../../services/encryption.js';
-import { LoadBalancerCache } from '../../services/load-balancer-cache.js';
 
 export class KeysRepository {
-  private loadBalancerCache?: LoadBalancerCache;
+  private onKeyChangeCallbacks: Array<() => void> = [];
 
   constructor(
     private db: Database.Database,
@@ -78,10 +77,8 @@ export class KeysRepository {
     `);
     stmt.run(blockedUntil, id);
     
-    // Invalidate cache when key blocking state changes
-    if (this.loadBalancerCache) {
-      this.loadBalancerCache.invalidateCache();
-    }
+    // Notify cache when key blocking state changes
+    this.onKeyChangeCallbacks.forEach(callback => callback());
   }
 
   incrementAuthFailures(id: number): number {
@@ -92,10 +89,8 @@ export class KeysRepository {
     `);
     stmt.run(id);
     
-    // Invalidate cache when auth failures change
-    if (this.loadBalancerCache) {
-      this.loadBalancerCache.invalidateCache();
-    }
+    // Notify cache when auth failures change
+    this.onKeyChangeCallbacks.forEach(callback => callback());
     
     const key = this.findById(id);
     return key!.consecutive_auth_failures;
@@ -109,10 +104,8 @@ export class KeysRepository {
     `);
     stmt.run(id);
     
-    // Invalidate cache when throttles change
-    if (this.loadBalancerCache) {
-      this.loadBalancerCache.invalidateCache();
-    }
+    // Notify cache when throttles change
+    this.onKeyChangeCallbacks.forEach(callback => callback());
     
     const key = this.findById(id);
     return key!.consecutive_throttles;
@@ -130,36 +123,40 @@ export class KeysRepository {
     `);
     stmt.run(now, id);
     
-    // Invalidate cache when counters are reset
-    if (this.loadBalancerCache) {
-      this.loadBalancerCache.invalidateCache();
-    }
+    // Notify cache when counters are reset
+    this.onKeyChangeCallbacks.forEach(callback => callback());
   }
 
   delete(id: number): void {
     const stmt = this.db.prepare(`DELETE FROM api_keys WHERE id = ?`);
     stmt.run(id);
     
-    // Invalidate cache when key is deleted
-    if (this.loadBalancerCache) {
-      this.loadBalancerCache.invalidateCache();
-    }
+    // Notify cache when key is deleted
+    this.onKeyChangeCallbacks.forEach(callback => callback());
   }
 
   deleteByHash(keyHash: string): void {
     const stmt = this.db.prepare(`DELETE FROM api_keys WHERE key_hash = ?`);
     stmt.run(keyHash);
     
-    // Invalidate cache when key is deleted
-    if (this.loadBalancerCache) {
-      this.loadBalancerCache.invalidateCache();
-    }
+    // Notify cache when key is deleted
+    this.onKeyChangeCallbacks.forEach(callback => callback());
   }
 
   /**
-   * Set the load balancer cache instance
+   * Register a callback to be called when keys change
    */
-  setLoadBalancerCache(cache: LoadBalancerCache): void {
-    this.loadBalancerCache = cache;
+  onKeyChange(callback: () => void): void {
+    this.onKeyChangeCallbacks.push(callback);
+  }
+
+  /**
+   * Remove a callback
+   */
+  removeKeyChangeCallback(callback: () => void): void {
+    const index = this.onKeyChangeCallbacks.indexOf(callback);
+    if (index > -1) {
+      this.onKeyChangeCallbacks.splice(index, 1);
+    }
   }
 }
