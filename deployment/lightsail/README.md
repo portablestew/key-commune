@@ -29,7 +29,12 @@ DuckDNS provides free dynamic DNS that automatically updates your IP address. Th
 7. Name your instance: `key-commune-app`
 8. Click "Create instance"
 9. Wait for the instance to start (15+ minutes on small instances)
-10. Note the **Public IP address** (e.g., 123.45.67.89)
+11. Note the **Public IP address** (e.g., 123.45.67.89)
+10. Select the created instance, select "Networking" and open port 443 (add HTTPS)
+
+### After completion:
+- Your API will be available at: `https://yourdomain.duckdns.org`
+- Test it with your browser or `curl`
 
 ### Important:
 - Your instance will have a dynamic IP that changes if you stop and start it
@@ -65,9 +70,6 @@ The bootstrap script will:
 9. Setup PM2 and automatic restarts
 10. Configure cron jobs for updates and certificate renewal
 
-### After completion:
-Your API will be available at: `https://yourdomain.duckdns.org`
-
 ## Operational Features
 
 - **Dedicated app user**: Application runs as non-root user for security
@@ -79,6 +81,12 @@ Your API will be available at: `https://yourdomain.duckdns.org`
 ## Troubleshooting
 
 ### Common Issues:
+
+**Installation failure**
+- SSH onto the host and try again
+- `cd /home/keycommune` -- does "key-commune" exist?
+  - If not, `sudo su` and paste in the bootstrap command from this page
+  - If key-commune exists, try `sudo key-commune/deployment/lightsail/setup.sh`
 
 **DNS not resolving:**
 - Wait up to 10 minutes for full propagation

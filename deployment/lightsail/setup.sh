@@ -133,6 +133,9 @@ install_dependencies() {
     apt update
     apt install -y nodejs npm certbot curl dnsutils
     
+    # Grant Node.js capability to bind to privileged ports (443, 80, etc.)
+    setcap 'cap_net_bind_service=+ep' $(which node)
+    
     # Install PM2 globally (needed for process management)
     npm install -g pm2
     
@@ -239,11 +242,11 @@ main() {
     cd /home/keycommune/key-commune
     log_info "Working directory: $(pwd)"
     
-    # Step 1: Install dependencies
-    install_dependencies
-    
-    # Step 2: Setup swap file
+    # Step 1: Setup swap file (before dependencies to prevent OOM)
     bash "$script_dir/setup-swap.sh"
+    
+    # Step 2: Install dependencies
+    install_dependencies
     
     # Step 3: Setup DuckDNS
     setup_duckdns
