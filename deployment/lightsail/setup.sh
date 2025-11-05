@@ -4,6 +4,10 @@
 
 set -e  # Exit on any error
 
+# Make helper scripts executable (handles Windows development environment)
+chmod +x "$(dirname "$0")/copy-certificates.sh" 2>/dev/null || true
+chmod +x "$(dirname "$0")/install-pm2.sh" 2>/dev/null || true
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -79,11 +83,23 @@ setup_cron() {
     
     # Create cron jobs
     (crontab -l 2>/dev/null; echo "*/15 * * * * curl -k 'https://www.duckdns.org/update?domains=$DUCKDNS_DOMAIN&token=$DUCKDNS_TOKEN&ip=' > /dev/null 2>&1") | crontab -
-    (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --post-hook 'pm2 restart key-commune'") | crontab -
+    (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet") | crontab -
+    
+    # Setup certbot renewal hook to copy certificates and restart PM2
+    # Copy the copy-certificates script verbatim to avoid privilege escalation
+    sudo mkdir -p /etc/letsencrypt/renewal-hooks/post
+    sudo cp "$(dirname "$0")/copy-certificates.sh" /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
+    sudo chmod +x /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
+    
+    # Note: Only copy-certificates.sh is in the renewal hooks directory
+    # Certbot will automatically execute it with the domain as $1 argument after successful renewal
+    # The script includes PM2 restart logic when certificates are renewed
+    log_info "Certificate renewal hook configured at /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh"
     
     log_success "Cron jobs installed"
     log_info "DuckDNS updates every 15 minutes"
-    log_info "SSL renewal check daily at 3 AM with PM2 restart"
+    log_info "SSL renewal check daily at 3 AM"
+    log_info "Certificate renewal hook configured with PM2 restart"
 }
 
 # Function to create HTTPS config
@@ -93,8 +109,8 @@ create_https_config() {
     cat > config/override.yaml << EOF
 ssl:
   enabled: true
-  cert_path: /etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org/fullchain.pem
-  key_path: /etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org/privkey.pem
+  cert_path: /home/keycommune/ssl-certs/fullchain.pem
+  key_path: /home/keycommune/ssl-certs/privkey.pem
 server:
   host: 0.0.0.0
   port: 443
@@ -103,20 +119,37 @@ EOF
     log_success "HTTPS configuration created"
 }
 
+# Function to create app user
+create_app_user() {
+    log_info "Creating dedicated app user..."
+    
+    # Create app user if it doesn't exist
+    if ! id "keycommune" &>/dev/null; then
+        sudo useradd -r -s /bin/false -d /home/keycommune -m keycommune
+        log_success "Created app user 'keycommune'"
+    else
+        log_info "App user 'keycommune' already exists"
+    fi
+    
+    # Create app directory
+    sudo mkdir -p /home/keycommune
+    sudo chown keycommune:keycommune /home/keycommune
+}
+
 # Function to install dependencies
 install_dependencies() {
     log_info "Installing dependencies..."
-    
-    # Create logs directory for PM2
-    mkdir -p logs
-    chmod 755 logs
     
     # Update system packages
     sudo apt update
     sudo apt upgrade -y
     
     # Install required packages
-    sudo apt install -y curl certbot
+    sudo apt install -y curl certbot nodejs npm
+    
+    # Create logs directory for PM2
+    mkdir -p logs
+    chmod 755 logs
     
     # Install Node.js dependencies (production only)
     npm install --omit=dev
@@ -149,12 +182,12 @@ setup_ssl() {
     # Check if certificate already exists
     if [[ -d "/etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org" ]]; then
         log_info "SSL certificate already exists, skipping renewal"
+        copy_certificates
         return 0
     fi
     
     # Stop any service on port 80 temporarily
     sudo systemctl stop nginx 2>/dev/null || true
-    sudo /opt/bitnami/ctlscript.sh stop apache || true
     
     # Run certbot
     sudo certbot certonly \
@@ -166,44 +199,38 @@ setup_ssl() {
     
     # Restart nginx if it was running
     sudo systemctl start nginx 2>/dev/null || true
-    sudo /opt/bitnami/ctlscript.sh start apache || true
     
-    if sudo ls "/etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org"; then
+    if sudo ls "/etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org" 2>/dev/null; then
         log_success "SSL certificate obtained successfully"
+        copy_certificates
     else
         log_error "Failed to obtain SSL certificate"
         exit 1
     fi
 }
 
+# Function to copy certificates to app user directory
+copy_certificates() {
+    log_info "Copying certificates to app user directory..."
+    "$(dirname "$0")/copy-certificates.sh" "$DUCKDNS_DOMAIN.duckdns.org"
+}
+
 # Function to setup PM2
 setup_pm2() {
-    log_info "Setting up PM2 process manager..."
+    log_info "Setting up PM2 process manager for keycommune user..."
     
-    # Install PM2 globally
-    sudo npm install -g pm2
+    # Change to application directory
+    cd "$(dirname "$0")/../.."
+    log_info "Working directory: $(pwd)"
     
-    # Install pm2-logrotate for log management
-    sudo pm2 install pm2-logrotate
+    # Run PM2 installation and setup as keycommune user
+    sudo -u keycommune bash "$(dirname "$0")/install-pm2.sh"
     
-    # Configure log rotation
-    sudo pm2 set pm2-logrotate:max_size 10M
-    sudo pm2 set pm2-logrotate:retain 7
-    sudo pm2 set pm2-logrotate:compress true
+    # Setup PM2 startup (system-level operation)
+    log_info "Setting up PM2 startup..."
+    sudo pm2 startup systemd -u keycommune --hp /home/keycommune | tail -n1 | bash
     
-    # Stop existing process if running
-    pm2 delete key-commune 2>/dev/null || true
-    
-    # Start the application
-    pm2 start dist/index.js --name key-commune
-    
-    # Save PM2 configuration
-    pm2 save
-    
-    # Setup PM2 startup
-    pm2 startup | tail -n1 | bash
-    
-    log_success "PM2 configured and application started"
+    log_success "PM2 configured and application started as keycommune user"
 }
 
 # Function to verify deployment
@@ -239,28 +266,31 @@ main() {
     cd "$(dirname "$0")/../.."
     log_info "Working directory: $(pwd)"
     
-    # Step 1: Install dependencies
+    # Step 1: Create app user
+    create_app_user
+    
+    # Step 2: Install dependencies
     install_dependencies
     
-    # Step 2: Setup DuckDNS
+    # Step 3: Setup DuckDNS
     setup_duckdns
     
-    # Step 3: Wait for DNS propagation
+    # Step 4: Wait for DNS propagation
     wait_for_dns
     
-    # Step 4: Setup SSL certificate
+    # Step 5: Setup SSL certificate
     setup_ssl
     
-    # Step 5: Create HTTPS configuration
+    # Step 6: Create HTTPS configuration
     create_https_config
     
-    # Step 6: Setup PM2
+    # Step 7: Setup PM2
     setup_pm2
     
-    # Step 7: Setup cron jobs
+    # Step 8: Setup cron jobs
     setup_cron
     
-    # Step 8: Verify deployment
+    # Step 9: Verify deployment
     verify_deployment
     
     echo

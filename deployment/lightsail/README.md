@@ -23,7 +23,7 @@ DuckDNS provides free dynamic DNS that automatically updates your IP address. Th
 1. Go to [AWS Lightsail Console](https://lightsail.aws.amazon.com)
 2. Click "Create instance"
 3. Choose platform: **Linux/Unix**
-4. Select blueprint: **Node.js**
+4. Select blueprint: **OS Only** → **Ubuntu 22.04 LTS**
 5. Add the optional Launch script (see below)
 6. Choose plan: **$5/month minimum recommended** (for production use)
 7. Name your instance: `key-commune-app`
@@ -59,15 +59,23 @@ Note: These commands may also be run on the Lightsail instance via SSH (use the 
 ### What happens next:
 The setup script will:
 1. Install all dependencies and build the application
-2. Configure DuckDNS to point to your instance
-3. Wait for DNS propagation (may take several minutes)
-4. Obtain a free SSL certificate from Let's Encrypt
-5. Configure the application for HTTPS
-6. Set up automatic updates
-7. Start the application with PM2
+2. Create a dedicated app user for security
+3. Configure DuckDNS to point to your instance
+4. Wait for DNS propagation (may take several minutes)
+5. Obtain a free SSL certificate from Let's Encrypt
+6. Set up automatic certificate renewal with app restart
+7. Configure the application for HTTPS
+8. Start the application with PM2 under the app user
 
 ### After completion:
 Your API will be available at: `https://yourdomain.duckdns.org`
+
+## Operational Features
+
+- **Dedicated app user**: Application runs as non-root user for security
+- **Automatic SSL renewal**: Certificates renew automatically and restart the app
+- **Isolated permissions**: App user has minimal required privileges
+- **Service management**: PM2 manages application lifecycle
 
 ## Troubleshooting
 
