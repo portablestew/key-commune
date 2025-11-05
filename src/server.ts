@@ -83,6 +83,13 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
   const loadBalancerCache = new LoadBalancerCache(keysRepo, statsRepo, config);
   keysRepo.onKeyChange(() => loadBalancerCache.invalidateCache());
 
+  // Pre-populate cache to avoid "degraded" status on startup
+  try {
+    await loadBalancerCache.refreshCache();
+  } catch (error) {
+    console.error('Failed to initialize cache:', error);
+  }
+
   // Initialize services
   const loadBalancer = new LoadBalancer();
   const keyManager = new KeyManager(keysRepo, statsRepo, config.blocking, config.database.max_keys);
