@@ -28,9 +28,8 @@ DuckDNS provides free dynamic DNS that automatically updates your IP address. Th
 6. Choose plan: **$5/month minimum recommended** (for production use)
 7. Name your instance: `key-commune-app`
 8. Click "Create instance"
-9. Wait for the instance to start (15+ minutes on small instances)
-11. Note the **Public IP address** (e.g., 123.45.67.89)
-10. Select the created instance, select "Networking" and open port 443 (add HTTPS)
+9. Open port 443: select the created instance -> Networking tab -> Add rule -> HTTPS -> Create
+10. Wait for the instance to start (15+ minutes on small instances)
 
 ### After completion:
 - Your API will be available at: `https://yourdomain.duckdns.org`

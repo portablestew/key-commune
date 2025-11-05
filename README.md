@@ -247,7 +247,31 @@ SELECT * FROM daily_stats WHERE date = date('now');
 
 See: [deployment/lightsail/README.md]()
 
-Example: https://keycommune.duckdns.org/
+### Free sample
+
+This example was deployed directly via the AWS Lightsail instructions linked above.
+- **[https://keycommune.duckdns.org/]()**
+
+The above endpoint may be used as an OpenAI-compatible API provider. It uses the settings in [config/default.yaml](). As a free sample, it notably only supports calling the "minimax" model on OpenRouter. Any caller may use this endpoint with an OpenRouter API key and automatically participate in the commune. 
+
+**Safety disclaimer**
+- Create a **unique** OpenRouter API key before attempting to call this sample endpoint
+- Set the API key's maximum budget to 0 credits (only allows free calls)
+- Key Commune is not responsible for the security/integrity of keys willingly sent to this endpoint
+- If in doubt, revoke the API key through OpenRouter
+
+**Roo Code example**
+
+The sample Key Commune is suitable for agentic coding in Roo Code. First, [sign up for OpenRouter and generate a key](https://openrouter.ai/settings/keys). Then, create a configuration profile:
+- Name: *Key Commune (Public)*
+- API Provider: *OpenAI Compatible*
+- Base URL: *https://keycommune.duckdns.org/*
+- API Key: copy-paste a unique, 0-budgeted OpenRouter API key here
+- Model: *minimax/minimax-m2:free*
+- Enable Reasoning Effort: *Medium*
+- Context Window Size: 128000
+- Image Support: *no*
+- Advanced settings: *Rate limit=3s*
 
 ## License
 
