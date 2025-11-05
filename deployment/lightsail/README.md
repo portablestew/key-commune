@@ -77,6 +77,31 @@ The bootstrap script will:
 - **Swap file**: 1GB swap file prevents OOM during installation on small instance types
 - **Service management**: PM2 manages application lifecycle
 
+## Updating to Latest Version
+
+To update your running server to the latest key-commune version:
+
+1. SSH into your instance
+
+2. Switch to the app user and update code:
+   ```bash
+   sudo su - keycommune
+   cd ~/key-commune
+   git pull origin main
+   ```
+
+3. Rebuild and restart:
+   ```bash
+   npm install
+   npm run build
+   pm2 restart key-commune
+   ```
+
+4. Verify the update:
+   ```bash
+   pm2 logs key-commune --lines 50
+   ```
+
 ## Troubleshooting
 
 ### Common Issues:

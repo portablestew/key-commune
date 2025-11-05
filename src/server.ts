@@ -26,6 +26,8 @@ export interface ServerWithCleanup {
 }
 
 export async function createServer(config: AppConfig): Promise<ServerWithCleanup> {
+  const serverStartTime = Date.now();
+
   // Initialize Fastify with logging and SSL if enabled
   let fastifyOptions: any = {
     logger: {
@@ -90,6 +92,97 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
   // Initialize and start stats cleanup service
   const statsCleanupService = new StatsCleanupService(statsRepo, config);
   statsCleanupService.start();
+
+  // Index page route
+  server.get('/', async (request, reply) => {
+    const cacheStatus = loadBalancerCache.getCacheStatus();
+    const cacheStatusText = cacheStatus.cached
+      ? `Fresh (${(cacheStatus.ageMs / 1000).toFixed(1)}s old)`
+      : 'Not initialized';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Key Commune</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      line-height: 1.6;
+      color: #333;
+    }
+    h1 { color: #2c3e50; margin-bottom: 10px; }
+    .subtitle { color: #7f8c8d; margin-bottom: 30px; }
+    .stats {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 4px solid #3498db;
+    }
+    .stat-item { margin: 8px 0; }
+    a { color: #3498db; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>🔑 Key Commune</h1>
+  <p class="subtitle">A proxy server for sharing a pool of API keys</p>
+  
+  <p>
+    This server automatically manages a shared pool of API keys, providing
+    improved availability and financial isolation. Callers join the commune
+    by making valid requests, then benefit from load balancing across all keys.
+  </p>
+
+  <div class="stats">
+    <h2>Pool Status</h2>
+    <div class="stat-item">📊 Available Keys: <strong>${cacheStatus.keyCount}</strong></div>
+    <div class="stat-item">💾 Cache: <strong>${cacheStatusText}</strong></div>
+  </div>
+
+  <h3>Links</h3>
+  <ul>
+    <li><a href="https://github.com/portablestew/key-commune">GitHub Repository</a></li>
+    <li><a href="/health">Health Status (JSON)</a></li>
+  </ul>
+</body>
+</html>`;
+
+    reply.type('text/html');
+    return html;
+  });
+
+  // Health check route
+  server.get('/health', async (request, reply) => {
+    const cacheStatus = loadBalancerCache.getCacheStatus();
+    
+    let status: string;
+    if (cacheStatus.keyCount === 0) {
+      status = 'degraded';
+    } else if (!cacheStatus.cached) {
+      status = 'initializing';
+    } else {
+      status = 'healthy';
+    }
+
+    const healthData = {
+      status,
+      timestamp: new Date().toISOString(),
+      uptime_seconds: Math.floor((Date.now() - serverStartTime) / 1000),
+      pool: {
+        available_keys: cacheStatus.keyCount,
+        cache_status: cacheStatus.cached ? 'cached' : 'not_cached',
+        cache_age_ms: cacheStatus.ageMs
+      }
+    };
+
+    reply.type('application/json');
+    return healthData;
+  });
 
   // Main proxy route - handle all requests
   server.all('/*', async (request, reply) => {
