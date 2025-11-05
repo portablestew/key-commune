@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import Fastify, { FastifyInstance } from 'fastify';
 import { AppConfig } from './types/config.js';
 import { ApiKey } from './types/database.js';
@@ -19,17 +21,50 @@ import { LoadBalancerCache } from './services/load-balancer-cache.js';
  * Server startup result with cleanup service for shutdown handling
  */
 export interface ServerWithCleanup {
-  server: FastifyInstance;
+  server: any;
   statsCleanupService: StatsCleanupService;
 }
 
 export async function createServer(config: AppConfig): Promise<ServerWithCleanup> {
-  // Initialize Fastify with logging
-  const server = Fastify({
+  // Initialize Fastify with logging and SSL if enabled
+  let fastifyOptions: any = {
     logger: {
       level: 'info',
     },
-  });
+  };
+
+  // Configure SSL if enabled
+  if (config.ssl?.enabled) {
+    if (!config.ssl.cert_path || !config.ssl.key_path) {
+      throw new Error('SSL is enabled but certificate or key path is missing');
+    }
+
+    try {
+      const certPath = path.resolve(process.cwd(), config.ssl.cert_path);
+      const keyPath = path.resolve(process.cwd(), config.ssl.key_path);
+      
+      // Read certificate files
+      const cert = fs.readFileSync(certPath, 'utf8');
+      const key = fs.readFileSync(keyPath, 'utf8');
+      
+      // Configure HTTPS
+      fastifyOptions.https = {
+        cert,
+        key,
+      };
+      
+      console.log('SSL enabled with certificates:', {
+        cert_path: config.ssl.cert_path,
+        key_path: config.ssl.key_path,
+      });
+    } catch (error) {
+      throw new Error(`Failed to load SSL certificates: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else {
+    console.log('SSL disabled - using HTTP');
+  }
+
+  const server = Fastify(fastifyOptions);
 
   // Set error handler
   server.setErrorHandler(errorHandler);

@@ -62,6 +62,12 @@ export const StatsConfigSchema = z.object({
   cache_expiry_seconds: z.number().positive().default(60),
 });
 
+export const SSLConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  cert_path: z.string().optional(),
+  key_path: z.string().optional(),
+}).optional();
+
 export const AppConfigSchema = z.object({
   server: ServerConfigSchema,
   database: DatabaseConfigSchema,
@@ -69,5 +75,6 @@ export const AppConfigSchema = z.object({
   logging: LoggingConfigSchema,
   stats: StatsConfigSchema,
   providers: z.array(ProviderConfigSchema),
+  ssl: SSLConfigSchema,
   encryption_key: z.string().optional(),
 });

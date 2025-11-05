@@ -62,6 +62,12 @@ export interface StatsConfig {
   cache_expiry_seconds: number;
 }
 
+export interface SSLConfig {
+  enabled?: boolean;
+  cert_path?: string;
+  key_path?: string;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   database: DatabaseConfig;
@@ -69,5 +75,6 @@ export interface AppConfig {
   logging: LoggingConfig;
   stats: StatsConfig;
   providers: ProviderConfig[];
+  ssl?: SSLConfig;
   encryption_key?: string;
 }

@@ -21,6 +21,10 @@
   ],
   "author": "portablestew",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
   "dependencies": {
     "better-sqlite3": "^9.2.0",
     "dotenv": "^16.6.1",

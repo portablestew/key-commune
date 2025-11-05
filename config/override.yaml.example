@@ -1,0 +1,33 @@
+# Example configuration override file
+# Copy this to override.yaml to customize Key-Commune for your environment
+
+# SSL Configuration for production deployment with Let's Encrypt + DuckDNS
+ssl:
+  enabled: true
+  cert_path: ./ssl/your-domain.duckdns.org.crt
+  key_path: ./ssl/your-domain.duckdns.org.key
+
+# Server configuration for production
+server:
+  # WARNING: Binding to 0.0.0.0 exposes your service to all network interfaces.
+  # Only use this in production with proper firewall rules and SSL enabled.
+  host: 0.0.0.0
+  port: 443
+
+# Override database path for production
+database:
+  path: /opt/key-commune/data/keys.db
+
+# Override logging for production
+logging:
+  level: warn
+  key_display:
+    prefix_length: 2
+    suffix_length: 2
+
+# Optional: Override provider settings
+# providers:
+#   - name: openai
+#     timeout_ms: 30000  # Shorter timeout in production
+#   - name: anthropic
+#     timeout_ms: 30000

@@ -10,8 +10,9 @@ export interface AuthInfo {
 /**
  * Extract API key from Authorization header
  * Supports: "Bearer <key>", "sk-<key>", or raw key
+ * Works with both HTTP and HTTPS servers
  */
-export function extractAuthKey(request: FastifyRequest): AuthInfo | null {
+export function extractAuthKey(request: FastifyRequest<any, any, any, any, any, any, any>): AuthInfo | null {
   const authHeader = request.headers.authorization;
   
   if (!authHeader) {
@@ -38,8 +39,9 @@ export function extractAuthKey(request: FastifyRequest): AuthInfo | null {
 
 /**
  * Extract client IP address from request
+ * Works with both HTTP and HTTPS servers
  */
-export function extractClientIP(request: FastifyRequest): string {
+export function extractClientIP(request: FastifyRequest<any, any, any, any, any, any, any>): string {
   // Check X-Forwarded-For header (proxy/load balancer)
   const forwarded = request.headers['x-forwarded-for'];
   if (forwarded) {

@@ -1,12 +1,12 @@
 import { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 
 /**
- * Global error handler for Fastify
+ * Global error handler for Fastify - works with both HTTP and HTTPS servers
  */
 export function errorHandler(
   error: FastifyError,
-  request: FastifyRequest,
-  reply: FastifyReply
+  request: FastifyRequest<any, any, any, any, any, any, any>,
+  reply: FastifyReply<any, any, any, any, any, any, any>
 ): void {
   // Log error
   request.log.error({
@@ -61,10 +61,10 @@ export function errorHandler(
 }
 
 /**
- * Send error response
+ * Send error response - works with both HTTP and HTTPS servers
  */
 export function sendError(
-  reply: FastifyReply,
+  reply: FastifyReply<any, any, any, any, any, any, any>,
   statusCode: number,
   error: string,
   message: string
