@@ -45,7 +45,7 @@ fi
 mkdir -p /home/keycommune/ssl-certs
 
 # Copy certificates to app user directory
-cp -r /etc/letsencrypt/live/$DOMAIN/* /home/keycommune/ssl-certs/
+cp -rL /etc/letsencrypt/live/$DOMAIN/* /home/keycommune/ssl-certs/
 
 # Set ownership and permissions
 chown -R keycommune:keycommune /home/keycommune/ssl-certs

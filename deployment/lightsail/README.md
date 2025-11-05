@@ -28,7 +28,7 @@ DuckDNS provides free dynamic DNS that automatically updates your IP address. Th
 6. Choose plan: **$5/month minimum recommended** (for production use)
 7. Name your instance: `key-commune-app`
 8. Click "Create instance"
-9. Wait for the instance to start (2-3 minutes)
+9. Wait for the instance to start (15+ minutes on small instances)
 10. Note the **Public IP address** (e.g., 123.45.67.89)
 
 ### Important:
@@ -57,7 +57,7 @@ The bootstrap script will:
 1. System update, upgrade, and install git
 2. Create dedicated keycommune user
 3. Clone repository to /home/keycommune/key-commune/
-4. Install nodejs, npm, certbot, dnsutils
+4. Install nodejs, npm, certbot, dnsutils, and swap file
 5. Configure DuckDNS
 6. Wait for DNS propagation
 7. Obtain SSL certificate
@@ -73,6 +73,7 @@ Your API will be available at: `https://yourdomain.duckdns.org`
 - **Dedicated app user**: Application runs as non-root user for security
 - **Automatic SSL renewal**: Certificates renew automatically and restart the app
 - **Isolated permissions**: App user has minimal required privileges
+- **Swap file**: 1GB swap file prevents OOM during installation on small instance types
 - **Service management**: PM2 manages application lifecycle
 
 ## Troubleshooting

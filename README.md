@@ -188,24 +188,6 @@ npm run lint
 npm run format
 ```
 
-## Deployment
-
-### Using PM2
-
-```bash
-# Install PM2 globally
-npm install -g pm2
-
-# Start with PM2
-pm2 start dist/index.js --name key-commune
-
-# Save PM2 configuration
-pm2 save
-
-# Setup auto-restart on system reboot
-pm2 startup
-```
-
 ## Security Considerations
 
 1. **Bind to localhost**: Default configuration binds to 127.0.0.1 (localhost only)
@@ -214,18 +196,7 @@ pm2 startup
 4. **Client privacy**: IPs tracked as /24 subnets only
 5. **Reverse proxy**: Use nginx or similar in production for TLS termination
 
-## Monitoring
-
-### Logs
-
-Key Commune uses Pino for structured JSON logging:
-
-```bash
-# View logs (if using PM2)
-pm2 logs key-commune
-```
-
-### Database
+## Database
 
 Query the SQLite database directly:
 
@@ -269,6 +240,14 @@ SELECT * FROM daily_stats WHERE date = date('now');
 - If at max_keys limit, consider:
   - Increasing `database.max_keys` in config
   - Removing unused/blocked keys: `DELETE FROM api_keys WHERE blocked_until > unixepoch() AND last_success_at < unixepoch() - 86400;`
+
+## Deployment
+
+### AWS Lightsail
+
+See: [deployment/lightsail/README.md]()
+
+Example: https://keycommune.duckdns.org/
 
 ## License
 

@@ -4,9 +4,12 @@
 
 set -e  # Exit on any error
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Make helper scripts executable (handles Windows development environment)
-chmod +x "$(dirname "$0")/copy-certificates.sh" 2>/dev/null || true
-chmod +x "$(dirname "$0")/install-pm2.sh" 2>/dev/null || true
+chmod +x "$script_dir/copy-certificates.sh" 2>/dev/null || true
+chmod +x "$script_dir/install-pm2.sh" 2>/dev/null || true
+chmod +x "$script_dir/setup-swap.sh" 2>/dev/null || true
 
 # Colors for output
 RED='\033[0;31m'
@@ -88,7 +91,7 @@ setup_cron() {
     # Setup certbot renewal hook to copy certificates and restart PM2
     # Copy the copy-certificates script verbatim to avoid privilege escalation
     mkdir -p /etc/letsencrypt/renewal-hooks/post
-    cp "$(dirname "$0")/copy-certificates.sh" /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
+    cp "$script_dir/copy-certificates.sh" /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
     chmod +x /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh
     
     # Note: Only copy-certificates.sh is in the renewal hooks directory
@@ -182,7 +185,7 @@ setup_ssl() {
 # Function to copy certificates to app user directory
 copy_certificates() {
     log_info "Copying certificates to app user directory..."
-    "$(dirname "$0")/copy-certificates.sh" "$DUCKDNS_DOMAIN.duckdns.org"
+    "$script_dir/copy-certificates.sh" "$DUCKDNS_DOMAIN.duckdns.org"
 }
 
 # Function to setup PM2
@@ -194,7 +197,7 @@ setup_pm2() {
     log_info "Working directory: $(pwd)"
     
     # Run PM2 installation and setup as keycommune user
-    sudo -u keycommune bash /home/keycommune/key-commune/deployment/lightsail/install-pm2.sh
+    sudo -u keycommune bash "$script_dir/install-pm2.sh"
     
     # Setup PM2 startup (system-level operation)
     log_info "Setting up PM2 startup..."
@@ -239,29 +242,40 @@ main() {
     # Step 1: Install dependencies
     install_dependencies
     
-    # Step 2: Setup DuckDNS
+    # Step 2: Setup swap file
+    bash "$script_dir/setup-swap.sh"
+    
+    # Step 3: Setup DuckDNS
     setup_duckdns
     
-    # Step 3: Wait for DNS propagation
+    # Step 4: Wait for DNS propagation
     wait_for_dns
     
-    # Step 4: Setup SSL certificate
+    # Step 5: Setup SSL certificate
     setup_ssl
     
-    # Step 5: Create HTTPS configuration
+    # Step 6: Create HTTPS configuration
     create_https_config
     
-    # Step 6: Setup PM2
+    # Step 7: Setup PM2
     setup_pm2
     
-    # Step 7: Setup cron jobs
+    # Step 8: Setup cron jobs
     setup_cron
     
-    # Step 8: Verify deployment
+    # Step 9: Verify deployment
     verify_deployment
     
     echo
     log_success "🎉 Deployment complete!"
+    echo
+    echo -e "${GREEN}Deployment Summary:${NC}"
+    echo "✅ System dependencies installed"
+    echo "✅ Swap file configured (1GB)"
+    echo "✅ DuckDNS configured"
+    echo "✅ SSL certificate obtained"
+    echo "✅ PM2 process manager configured"
+    echo "✅ Automatic updates configured"
     echo
     echo -e "${GREEN}Your Key-Commune API is now available at:${NC}"
     echo -e "${BLUE}https://$DUCKDNS_DOMAIN.duckdns.org${NC}"
