@@ -42,7 +42,7 @@ check_env_vars() {
 
 # Function to get current external IP
 get_external_ip() {
-    curl -s ifconfig.me || curl -s ipecho.net/plain || curl -s icanhazip.com
+    curl -4s ifconfig.me || curl -4s ipecho.net/plain || curl -4s icanhazip.com
 }
 
 # Function to wait for DNS propagation
@@ -113,12 +113,13 @@ install_dependencies() {
     
     # Update system packages
     sudo apt update
+    sudo apt upgrade -y
     
     # Install required packages
-    sudo apt install -y curl dig certbot
+    sudo apt install -y curl certbot
     
     # Install Node.js dependencies (production only)
-    npm ci --only=production
+    npm install --omit=dev
     
     # Build the application
     npm run build
@@ -153,6 +154,7 @@ setup_ssl() {
     
     # Stop any service on port 80 temporarily
     sudo systemctl stop nginx 2>/dev/null || true
+    sudo /opt/bitnami/ctlscript.sh stop apache || true
     
     # Run certbot
     sudo certbot certonly \
@@ -164,8 +166,9 @@ setup_ssl() {
     
     # Restart nginx if it was running
     sudo systemctl start nginx 2>/dev/null || true
+    sudo /opt/bitnami/ctlscript.sh start apache || true
     
-    if [[ -d "/etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org" ]]; then
+    if sudo ls "/etc/letsencrypt/live/$DUCKDNS_DOMAIN.duckdns.org"; then
         log_success "SSL certificate obtained successfully"
     else
         log_error "Failed to obtain SSL certificate"

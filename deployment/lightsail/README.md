@@ -44,9 +44,9 @@ export DUCKDNS_TOKEN=abc123def456ghi789
 
 # Download and run setup
 sudo apt update && sudo apt install -y git
-git clone https://github.com/portablestew/key-commune
+git clone https://github.com/portablestew/key-commune.git
 cd key-commune
-./deployment/lightsail/setup.sh
+bash ./deployment/lightsail/setup.sh
 ```
 
 Note: These commands may also be run on the Lightsail instance via SSH (use the browser-based terminal in the Lightsail console).

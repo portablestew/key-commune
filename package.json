@@ -26,6 +26,8 @@
     "npm": ">=10.0.0"
   },
   "dependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/js-yaml": "^4.0.9",
     "better-sqlite3": "^9.2.0",
     "dotenv": "^16.6.1",
     "fastify": "^4.25.0",
@@ -37,8 +39,6 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.8",
-    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.24",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
