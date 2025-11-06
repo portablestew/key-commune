@@ -240,14 +240,14 @@ SELECT * FROM daily_stats WHERE date = date('now');
 
 ### AWS Lightsail
 
-See: [deployment/lightsail/README.md]()
+See: [deployment/lightsail/README.md](deployment/lightsail/README.md)
 
 ### Free sample
 
 This example was deployed directly via the AWS Lightsail instructions linked above:
-- **[https://keycommune.duckdns.org/]()**
+- **https://keycommune.duckdns.org/**
 
-The above endpoint may be used as an OpenAI-compatible API provider. It uses the settings in [config/default.yaml](). As a free sample, it notably only supports calling the "minimax" model on OpenRouter. Any caller may use this endpoint with an OpenRouter API key and automatically participate in the commune. 
+The above endpoint may be used as an OpenAI-compatible API provider. It uses the settings in [config/default.yaml](config/default.yaml). As a free sample, it notably only supports calling the "minimax" model on OpenRouter. Any caller may use this endpoint with an OpenRouter API key and automatically participate in the commune. 
 
 **Safety disclaimer**
 - Create a **unique** OpenRouter API key before attempting to call this sample endpoint
@@ -257,16 +257,22 @@ The above endpoint may be used as an OpenAI-compatible API provider. It uses the
 
 **Roo Code example**
 
-The sample Key Commune is suitable for agentic coding in Roo Code. First, [sign up for OpenRouter and generate a key](https://openrouter.ai/settings/keys). Then, create a configuration profile:
-- Name: *Key Commune (Public)*
-- API Provider: *OpenAI Compatible*
-- Base URL: *https://keycommune.duckdns.org/*
-- API Key: copy-paste a unique, 0-budgeted OpenRouter API key here
-- Model: *minimax/minimax-m2:free*
-- Enable Reasoning Effort: *Medium*
-- Context Window Size: 128000
-- Image Support: *no*
-- Advanced settings: *Rate limit=3s*
+The sample Key Commune is suitable for agentic coding in Roo Code. To try it out:
+
+1. Sign up for OpenRouter and generate a key
+    - Create API Key: https://openrouter.ai/settings/keys
+    - Name: any string, e.g. "Free Sample"
+    - Credit limit: **set to 0**
+2. Open: Roo Code settings -> Providers -> Click `+` to Add Profile
+    - Name: any string, e.g. "Key Commune (Public)"
+    - API Provider: *OpenAI Compatible*
+    - Base URL: *https://keycommune.duckdns.org/*
+    - API Key: copy-paste a unique, 0-budgeted OpenRouter API key here
+    - Model: *minimax/minimax-m2:free*
+    - Enable Reasoning Effort: *Medium*
+    - Context Window Size: 128000
+    - Image Support: *no*
+    - Advanced settings: *Rate limit=3s*
 
 ## License
 
