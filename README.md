@@ -3,13 +3,14 @@
 Key Commune is a proxy server that automatically manages a shared pool of API keys. It provides improved availability and financial isolation.
 1. A caller joins the "commune" by making a valid request with a valid API key. This key must uniquely identify the caller.
 2. The call is proxied through. On success, the key is considered valid and added to the communal pool. 
-3. Each caller continues to make requests using *their own* API key, but each request is load balanced to use another API key from the pool.
+3. Each caller continues to make requests using *their own* API key, but each request is load balanced to use a random API key from the pool.
 
 ## Use cases
 - **Capacity sharing with isolation**: Share underlying API capacity across different customer keys while limiting the impact of noisy neighbors
 - **Production redundancy**: Use multiple production keys for load balancing and automatic failover when primary accounts hit limits
 - **Traffic spike handling**: Allow requests to utilize capacity across multiple accounts during high-demand periods without manual intervention
 - **Seamless key migration**: Gradually transition from one set of API keys to another (e.g., scaling up production capacity) without service disruption
+- **Traffic anonymity**: An individual's sequence of calls may be harder to track when spread across a pool of keys. 
 
 ## Features
 
@@ -247,7 +248,7 @@ See: [deployment/lightsail/README.md](deployment/lightsail/README.md)
 This example was deployed directly via the AWS Lightsail instructions linked above:
 - **https://keycommune.duckdns.org/**
 
-The above endpoint may be used as an OpenAI-compatible API provider. It uses the settings in [config/default.yaml](config/default.yaml). As a free sample, it notably only supports calling the "minimax" model on OpenRouter. Any caller may use this endpoint with an OpenRouter API key and automatically participate in the commune. 
+The above endpoint may be used as an OpenAI-compatible API provider. It uses the settings in [config/default.yaml](config/default.yaml). As a free sample, it notably only supports calling free models on OpenRouter. Any caller may use this endpoint with an OpenRouter API key and automatically participate in the commune. 
 
 **Safety disclaimer**
 - Create a **unique** OpenRouter API key before attempting to call this sample endpoint
@@ -268,9 +269,9 @@ The sample Key Commune is suitable for agentic coding in Roo Code. To try it out
     - API Provider: *OpenAI Compatible*
     - Base URL: *https://keycommune.duckdns.org/*
     - API Key: copy-paste a unique, 0-budgeted OpenRouter API key here
-    - Model: *minimax/minimax-m2:free*
+    - Model: *tngtech/deepseek-r1t2-chimera:free*
     - Enable Reasoning Effort: *Medium*
-    - Context Window Size: 128000
+    - Context Window Size: *160000*
     - Image Support: *no*
     - Advanced settings: *Rate limit=3s*
 
