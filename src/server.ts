@@ -166,19 +166,18 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
   // Health check route
   server.get('/health', async (request, reply) => {
+    // Get cached data for stats aggregation
+    const cacheEntry = await loadBalancerCache.getCachedLoadBalancerData();
     const cacheStatus = loadBalancerCache.getCacheStatus();
     
     let status: string;
-    if (cacheStatus.keyCount === 0) {
-      status = 'degraded';
-    } else if (!cacheStatus.cached) {
+    if (!cacheStatus.cached) {
       status = 'initializing';
+    } else if (cacheStatus.keyCount === 0) {
+      status = 'degraded';
     } else {
       status = 'healthy';
     }
-
-    // Get cached data for stats aggregation
-    const cacheEntry = await loadBalancerCache.getCachedLoadBalancerData();
     
     // Calculate aggregates from cached data
     const totalKeys = cacheEntry.availableKeys.length;
