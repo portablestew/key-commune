@@ -83,23 +83,15 @@ To update your running server to the latest key-commune version:
 
 1. SSH into your instance
 
-2. Switch to the app user and update code:
+2. Create and run a script like:
    ```bash
-   sudo -u keycommune bash
-   cd ~/key-commune
-   git pull origin main
+   #!/bin/bash
+   sudo -u keycommune bash -c "cd ~/key-commune && git pull origin main && npm install && npm run build && pm2 restart key-commune"
    ```
 
-3. Rebuild and restart:
+3. Verify the update:
    ```bash
-   npm install
-   npm run build
-   pm2 restart key-commune
-   ```
-
-4. Verify the update:
-   ```bash
-   pm2 logs key-commune --lines 50
+   sudo -u keycommune pm2 logs key-commune --lines 50
    ```
 
 ## Troubleshooting
