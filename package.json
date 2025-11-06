@@ -1,6 +1,6 @@
 {
   "name": "key-commune",
-  "version": "1.0.0",
+  "version": "1.0.0-rc.0",
   "description": "A web server proxy that load balances API requests across a pool of API keys",
   "main": "dist/index.js",
   "type": "module",

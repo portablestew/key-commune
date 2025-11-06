@@ -147,6 +147,7 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
   <div class="stats">
     <h2>Pool Status</h2>
+    <div class="stat-item">🌐 Provider: <strong>${config.server.provider}</strong></div>
     <div class="stat-item">📊 Available Keys: <strong>${cacheStatus.keyCount}</strong></div>
     <div class="stat-item">💾 Cache: <strong>${cacheStatusText}</strong></div>
   </div>
@@ -176,6 +177,22 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
       status = 'healthy';
     }
 
+    // Get cached data for stats aggregation
+    const cacheEntry = await loadBalancerCache.getCachedLoadBalancerData();
+    
+    // Calculate aggregates from cached data
+    const totalKeys = cacheEntry.availableKeys.length;
+    const blockedKeys = cacheEntry.availableKeys.filter(key =>
+      key.blocked_until && key.blocked_until > Math.floor(Date.now() / 1000)
+    ).length;
+    
+    const totalCalls = Array.from(cacheEntry.statsMap.values()).reduce(
+      (sum, stat) => sum + stat.call_count, 0
+    );
+    const totalThrottles = Array.from(cacheEntry.statsMap.values()).reduce(
+      (sum, stat) => sum + stat.throttle_count, 0
+    );
+
     const healthData = {
       status,
       timestamp: new Date().toISOString(),
@@ -183,7 +200,13 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
       pool: {
         available_keys: cacheStatus.keyCount,
         cache_status: cacheStatus.cached ? 'cached' : 'not_cached',
-        cache_age_ms: cacheStatus.ageMs
+        cache_age_ms: cacheStatus.ageMs,
+        stats: {
+          total_keys: totalKeys,
+          blocked_keys: blockedKeys,
+          total_calls_today: totalCalls,
+          total_throttles_today: totalThrottles
+        }
       }
     };
 
