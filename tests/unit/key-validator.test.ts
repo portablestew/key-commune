@@ -45,7 +45,6 @@ describe('KeyValidator', () => {
         name: 'test',
         base_url: 'https://api.example.com',
         auth_header: 'Authorization',
-        url_patterns: ['*'],
       };
       const result = validator.validateRequest(provider, {}, '/path', {});
       expect(result.valid).toBe(true);
@@ -56,7 +55,6 @@ describe('KeyValidator', () => {
         name: 'test',
         base_url: 'https://api.example.com',
         auth_header: 'Authorization',
-        url_patterns: ['*'],
         validation: [
           {
             type: 'body-json',
@@ -75,7 +73,6 @@ describe('KeyValidator', () => {
         name: 'test',
         base_url: 'https://api.example.com',
         auth_header: 'Authorization',
-        url_patterns: ['*'],
         validation: [
           {
             type: 'body-json',
@@ -95,7 +92,6 @@ describe('KeyValidator', () => {
         name: 'test',
         base_url: 'https://api.example.com',
         auth_header: 'Authorization',
-        url_patterns: ['*'],
         validation: [
           {
             type: 'body-json',
@@ -115,7 +111,6 @@ describe('KeyValidator', () => {
         name: 'test',
         base_url: 'https://api.example.com',
         auth_header: 'Authorization',
-        url_patterns: ['*'],
         validation: [
           {
             type: 'body-json',
@@ -134,7 +129,6 @@ describe('KeyValidator', () => {
         name: 'test',
         base_url: 'https://api.example.com',
         auth_header: 'Authorization',
-        url_patterns: ['*'],
         validation: [
           {
             type: 'path',
@@ -152,7 +146,6 @@ describe('KeyValidator', () => {
         name: 'test',
         base_url: 'https://api.example.com',
         auth_header: 'Authorization',
-        url_patterns: ['*'],
         validation: [
           {
             type: 'query',
@@ -171,7 +164,6 @@ describe('KeyValidator', () => {
         name: 'test',
         base_url: 'https://api.example.com',
         auth_header: 'Authorization',
-        url_patterns: ['*'],
         validation: [
           {
             type: 'body-json',

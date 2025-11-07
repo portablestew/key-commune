@@ -43,37 +43,38 @@ logging:
 
 providers:
   - name: openai
-    base_url: https://api.openai.com
+    base_url: https://api.openai.com/v1
     timeout_ms: 60000
     auth_header: Authorization
-    url_patterns:
-      - ^/v1/
     validation:
       - type: body-json
         key: model
         pattern: ^gpt-
+    cacheable_paths:
+      - path: ^/models
+        ttl_seconds: 300
 
   - name: anthropic
-    base_url: https://api.anthropic.com
+    base_url: https://api.anthropic.com/v1
     timeout_ms: 60000
     auth_header: x-api-key
-    url_patterns:
-      - ^/v1/
     validation:
       - type: body-json
         key: model
         pattern: ^claude-
+    cacheable_paths:
+      - path: ^/models
+        ttl_seconds: 300
 
   - name: openrouter
     base_url: https://openrouter.ai/api/v1
     timeout_ms: 60000
     auth_header: Authorization
-    url_patterns:
-      - ^/api/
     validation:
-      min_key_length: 16
-      max_key_length: 256
       custom_rules:
         - type: body-json
           json_key: model
           regex: ".+:free$"
+    cacheable_paths:
+      - path: ^/models
+        ttl_seconds: 300

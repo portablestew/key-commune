@@ -3,7 +3,9 @@ import { ApiKey, DbApiKey, dbKeyToApiKey } from '../../types/database.js';
 import { encryptKey, decryptKey } from '../../services/encryption.js';
 
 export class KeysRepository {
-  private onKeyChangeCallbacks: Array<() => void> = [];
+  private availableKeysCache: { keys: ApiKey[]; timestamp: number } | null = null;
+  private cacheExpiryMs: number = 0;
+  private refreshIntervalId: NodeJS.Timeout | null = null;
 
   constructor(
     private db: Database.Database,
@@ -18,7 +20,16 @@ export class KeysRepository {
     `);
     
     const result = stmt.run(keyHash, keyEncrypted, keyDisplay);
-    return this.findById(result.lastInsertRowid as number)!;
+    const newKey = this.findById(result.lastInsertRowid as number)!;
+    
+    // Add to cache if available
+    if (this.availableKeysCache &&
+        (newKey.blocked_until === null || newKey.blocked_until <= Math.floor(Date.now() / 1000))) {
+      this.availableKeysCache.keys.push(newKey);
+      this.shuffleArray(this.availableKeysCache.keys);
+    }
+    
+    return newKey;
   }
 
   findById(id: number): ApiKey | undefined {
@@ -43,17 +54,75 @@ export class KeysRepository {
     return dbKeyToApiKey(dbKey, decryptedKey);
   }
 
-  findAvailable(): ApiKey[] {
+  // Cache lifecycle methods
+  startCacheRefresh(cacheExpirySeconds: number): void {
+    this.cacheExpiryMs = cacheExpirySeconds * 1000;
+    this.refreshAvailableKeysCache();
+    this.refreshIntervalId = setInterval(() => {
+      this.refreshAvailableKeysCache();
+    }, Math.max(cacheExpirySeconds * 1000, 60000)); // Minimum 60 seconds
+  }
+
+  stopCacheRefresh(): void {
+    if (this.refreshIntervalId) {
+      clearInterval(this.refreshIntervalId);
+      this.refreshIntervalId = null;
+    }
+  }
+
+  private refreshAvailableKeysCache(): void {
     const now = Math.floor(Date.now() / 1000);
     const stmt = this.db.prepare(`
       SELECT * FROM api_keys
       WHERE blocked_until IS NULL OR blocked_until <= ?
     `);
     const dbKeys = stmt.all(now) as DbApiKey[];
-    return dbKeys.map(dbKey => {
+    const availableKeys = dbKeys.map(dbKey => {
       const decryptedKey = decryptKey(dbKey.key_encrypted, this.encryptionKey);
       return dbKeyToApiKey(dbKey, decryptedKey);
     });
+    this.shuffleArray(availableKeys);
+    this.availableKeysCache = { keys: availableKeys, timestamp: Date.now() };
+  }
+
+  private shuffleArray<T>(array: T[]): void {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+
+  // Cache read methods
+  getCachedAvailableKeys(): ApiKey[] {
+    if (!this.availableKeysCache || (Date.now() - this.availableKeysCache.timestamp) > this.cacheExpiryMs) {
+      this.refreshAvailableKeysCache();
+    }
+    return [...this.availableKeysCache!.keys]; // Return copy
+  }
+
+  getCacheStatus(): { cached: boolean; ageMs: number; keyCount: number } {
+    if (!this.availableKeysCache) {
+      return { cached: false, ageMs: 0, keyCount: 0 };
+    }
+    return {
+      cached: true,
+      ageMs: Date.now() - this.availableKeysCache.timestamp,
+      keyCount: this.availableKeysCache.keys.length
+    };
+  }
+
+  // Cache helper to get cached key entry for predictive updates
+  private getCachedKeyEntry(id: number): ApiKey | undefined {
+    if (!this.availableKeysCache) {
+      return undefined;
+    }
+
+    const index = this.availableKeysCache.keys.findIndex(k => k.id === id);
+    return index !== -1 ? this.availableKeysCache.keys[index] : undefined;
+  }
+
+  findAvailable(): ApiKey[] {
+    return this.getCachedAvailableKeys();
   }
 
   findAll(): ApiKey[] {
@@ -77,8 +146,20 @@ export class KeysRepository {
     `);
     stmt.run(blockedUntil, id);
     
-    // Notify cache when key blocking state changes
-    this.onKeyChangeCallbacks.forEach(callback => callback());
+    // Predictive cache update
+    const cachedKey = this.getCachedKeyEntry(id);
+    if (cachedKey) {
+      const now = Math.floor(Date.now() / 1000);
+      const isAvailable = blockedUntil === null || blockedUntil <= now;
+      
+      if (!isAvailable) {
+        // Key became unavailable - remove from cache
+        this.availableKeysCache!.keys = this.availableKeysCache!.keys.filter(k => k.id !== id);
+      } else {
+        // Update blocked_until field
+        cachedKey.blocked_until = blockedUntil;
+      }
+    }
   }
 
   incrementAuthFailures(id: number): number {
@@ -86,14 +167,17 @@ export class KeysRepository {
       UPDATE api_keys
       SET consecutive_auth_failures = consecutive_auth_failures + 1
       WHERE id = ?
+      RETURNING consecutive_auth_failures
     `);
-    stmt.run(id);
+    const result = stmt.get(id) as { consecutive_auth_failures: number };
     
-    // Notify cache when auth failures change
-    this.onKeyChangeCallbacks.forEach(callback => callback());
+    // Predictive cache update
+    const cachedKey = this.getCachedKeyEntry(id);
+    if (cachedKey) {
+      cachedKey.consecutive_auth_failures = result.consecutive_auth_failures;
+    }
     
-    const key = this.findById(id);
-    return key!.consecutive_auth_failures;
+    return result.consecutive_auth_failures;
   }
 
   incrementThrottles(id: number): number {
@@ -101,14 +185,17 @@ export class KeysRepository {
       UPDATE api_keys
       SET consecutive_throttles = consecutive_throttles + 1
       WHERE id = ?
+      RETURNING consecutive_throttles
     `);
-    stmt.run(id);
+    const result = stmt.get(id) as { consecutive_throttles: number };
     
-    // Notify cache when throttles change
-    this.onKeyChangeCallbacks.forEach(callback => callback());
+    // Predictive cache update
+    const cachedKey = this.getCachedKeyEntry(id);
+    if (cachedKey) {
+      cachedKey.consecutive_throttles = result.consecutive_throttles;
+    }
     
-    const key = this.findById(id);
-    return key!.consecutive_throttles;
+    return result.consecutive_throttles;
   }
 
   resetCounters(id: number): void {
@@ -123,40 +210,22 @@ export class KeysRepository {
     `);
     stmt.run(now, id);
     
-    // Notify cache when counters are reset
-    this.onKeyChangeCallbacks.forEach(callback => callback());
+    // Predictive cache update
+    const cachedKey = this.getCachedKeyEntry(id);
+    if (cachedKey) {
+      cachedKey.consecutive_auth_failures = 0;
+      cachedKey.consecutive_throttles = 0;
+      cachedKey.blocked_until = null;
+    }
   }
 
   delete(id: number): void {
     const stmt = this.db.prepare(`DELETE FROM api_keys WHERE id = ?`);
     stmt.run(id);
     
-    // Notify cache when key is deleted
-    this.onKeyChangeCallbacks.forEach(callback => callback());
-  }
-
-  deleteByHash(keyHash: string): void {
-    const stmt = this.db.prepare(`DELETE FROM api_keys WHERE key_hash = ?`);
-    stmt.run(keyHash);
-    
-    // Notify cache when key is deleted
-    this.onKeyChangeCallbacks.forEach(callback => callback());
-  }
-
-  /**
-   * Register a callback to be called when keys change
-   */
-  onKeyChange(callback: () => void): void {
-    this.onKeyChangeCallbacks.push(callback);
-  }
-
-  /**
-   * Remove a callback
-   */
-  removeKeyChangeCallback(callback: () => void): void {
-    const index = this.onKeyChangeCallbacks.indexOf(callback);
-    if (index > -1) {
-      this.onKeyChangeCallbacks.splice(index, 1);
+    // Predictive cache update - remove from cache
+    if (this.availableKeysCache) {
+      this.availableKeysCache.keys = this.availableKeysCache.keys.filter(k => k.id !== id);
     }
   }
 }

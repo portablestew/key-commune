@@ -18,12 +18,17 @@ export const ProviderValidationSchema = z.object({
   custom_rules: z.array(CustomValidationRuleSchema).optional(),
 });
 
+export const CacheablePathSchema = z.object({
+  path: z.string(),
+  ttl_seconds: z.number().positive(),
+});
+
 export const ProviderConfigSchema = z.object({
   name: z.string(),
   base_url: z.string().url(),
   timeout_ms: z.number().positive().optional().default(60000),
   auth_header: z.string(),
-  url_patterns: z.array(z.string()),
+  cacheable_paths: z.array(CacheablePathSchema).optional(),
   validation: z.union([z.array(ValidationRuleSchema), ProviderValidationSchema]).optional(),
 });
 

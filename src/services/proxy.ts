@@ -33,12 +33,13 @@ export class ProxyService {
     // Prepare headers
     const headers: Record<string, string> = { ...request.headers };
     
-    // Remove hop-by-hop headers
+    // Remove hop-by-hop headers and content-encoding (body is decompressed)
     delete headers['host'];
     delete headers['connection'];
     delete headers['keep-alive'];
     delete headers['transfer-encoding'];
     delete headers['authorization'];
+    delete headers['content-encoding'];
     
     // Set the API key in the provider's auth header
     headers[provider.auth_header] = `Bearer ${apiKey}`;
@@ -74,8 +75,8 @@ export class ProxyService {
       // Extract response headers
       const responseHeaders: Record<string, string> = {};
       response.headers.forEach((value: string, key: string) => {
-        // Skip hop-by-hop headers
-        if (!['connection', 'keep-alive', 'transfer-encoding'].includes(key.toLowerCase())) {
+        // Skip hop-by-hop headers and content-encoding (body is decompressed)
+        if (!['connection', 'keep-alive', 'transfer-encoding', 'content-encoding'].includes(key.toLowerCase())) {
           responseHeaders[key] = value;
         }
       });
@@ -123,30 +124,4 @@ export class ProxyService {
     return null;
   }
 
-  /**
-   * Match request URL to provider
-   */
-  matchProvider(providers: ProviderConfig[], path: string): ProviderConfig | null {
-    for (const provider of providers) {
-      for (const pattern of provider.url_patterns) {
-        if (this.matchPattern(pattern, path)) {
-          return provider;
-        }
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Match URL pattern using regex
-   */
-  private matchPattern(pattern: string, path: string): boolean {
-    try {
-      const regex = new RegExp(pattern);
-      return regex.test(path);
-    } catch (error) {
-      // Invalid regex pattern, return false
-      return false;
-    }
-  }
 }

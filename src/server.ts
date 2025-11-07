@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import Fastify, { FastifyInstance } from 'fastify';
+import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { AppConfig } from './types/config.js';
 import { ApiKey } from './types/database.js';
 import { getDatabase } from './db/database.js';
@@ -15,7 +15,7 @@ import { extractAuthKey, extractClientIP } from './middleware/auth-extractor.js'
 import { errorHandler, sendError } from './middleware/error-handler.js';
 import { generateDisplayKey } from './services/encryption.js';
 import { StatsCleanupService } from './services/stats-cleanup.js';
-import { LoadBalancerCache } from './services/load-balancer-cache.js';
+import { CacheableResponseCache } from './services/cacheable-response.js';
 
 /**
  * Server startup result with cleanup service for shutdown handling
@@ -33,6 +33,7 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
     logger: {
       level: 'info',
     },
+    http2: false, // Explicitly disable HTTP/2 to use standard IncomingMessage type
   };
 
   // Configure SSL if enabled
@@ -79,22 +80,16 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
   const keysRepo = new KeysRepository(db, config.encryption_key!);
   const statsRepo = new StatsRepository(db);
 
-  // Initialize load balancer cache
-  const loadBalancerCache = new LoadBalancerCache(keysRepo, statsRepo, config);
-  keysRepo.onKeyChange(() => loadBalancerCache.invalidateCache());
-
-  // Pre-populate cache to avoid "degraded" status on startup
-  try {
-    await loadBalancerCache.refreshCache();
-  } catch (error) {
-    console.error('Failed to initialize cache:', error);
-  }
+  // Initialize repository caches
+  keysRepo.startCacheRefresh(config.stats.cache_expiry_seconds);
+  statsRepo.startCacheRefresh(config.stats.cache_expiry_seconds);
 
   // Initialize services
   const loadBalancer = new LoadBalancer();
   const keyManager = new KeyManager(keysRepo, statsRepo, config.blocking, config.database.max_keys);
   const keyValidator = new KeyValidator();
   const proxyService = new ProxyService();
+  const cacheableResponseCache = new CacheableResponseCache(100);
 
   // Initialize and start stats cleanup service
   const statsCleanupService = new StatsCleanupService(statsRepo, config);
@@ -102,10 +97,12 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
   // Index page route
   server.get('/', async (request, reply) => {
-    const cacheStatus = loadBalancerCache.getCacheStatus();
-    const cacheStatusText = cacheStatus.cached
-      ? `Fresh (${(cacheStatus.ageMs / 1000).toFixed(1)}s old)`
+    const keysCacheStatus = keysRepo.getCacheStatus();
+    const keysCacheStatusText = keysCacheStatus.cached
+      ? `Fresh (${(keysCacheStatus.ageMs / 1000).toFixed(1)}s old)`
       : 'Not initialized';
+
+    const provider = config.providers.find(p => p.name === config.server.provider);
 
     const html = `<!DOCTYPE html>
 <html>
@@ -147,9 +144,9 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
   <div class="stats">
     <h2>Pool Status</h2>
-    <div class="stat-item">🌐 Provider: <strong>${config.server.provider}</strong></div>
-    <div class="stat-item">📊 Available Keys: <strong>${cacheStatus.keyCount}</strong></div>
-    <div class="stat-item">💾 Cache: <strong>${cacheStatusText}</strong></div>
+    <div class="stat-item">🌐 Provider: <a href="${provider?.base_url}" target="_blank"><strong>${config.server.provider}</strong></a></div>
+    <div class="stat-item">📊 Available Keys: <strong>${keysCacheStatus.keyCount}</strong></div>
+    <div class="stat-item">💾 Cache: <strong>${keysCacheStatusText}</strong></div>
   </div>
 
   <h3>Links</h3>
@@ -166,29 +163,31 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
   // Health check route
   server.get('/health', async (request, reply) => {
-    // Get cached data for stats aggregation
-    const cacheEntry = await loadBalancerCache.getCachedLoadBalancerData();
-    const cacheStatus = loadBalancerCache.getCacheStatus();
+    // Get cached data from repositories
+    const availableKeys = keysRepo.getCachedAvailableKeys();
+    const statsMap = statsRepo.getCachedTodayStats();
+    const keysCacheStatus = keysRepo.getCacheStatus();
+    const statsCacheStatus = statsRepo.getCacheStatus();
     
     let status: string;
-    if (!cacheStatus.cached) {
+    if (!keysCacheStatus.cached) {
       status = 'initializing';
-    } else if (cacheStatus.keyCount === 0) {
+    } else if (keysCacheStatus.keyCount === 0) {
       status = 'degraded';
     } else {
       status = 'healthy';
     }
     
     // Calculate aggregates from cached data
-    const totalKeys = cacheEntry.availableKeys.length;
-    const blockedKeys = cacheEntry.availableKeys.filter(key =>
+    const totalKeys = availableKeys.length;
+    const blockedKeys = availableKeys.filter(key =>
       key.blocked_until && key.blocked_until > Math.floor(Date.now() / 1000)
     ).length;
     
-    const totalCalls = Array.from(cacheEntry.statsMap.values()).reduce(
+    const totalCalls = Array.from(statsMap.values()).reduce(
       (sum, stat) => sum + stat.call_count, 0
     );
-    const totalThrottles = Array.from(cacheEntry.statsMap.values()).reduce(
+    const totalThrottles = Array.from(statsMap.values()).reduce(
       (sum, stat) => sum + stat.throttle_count, 0
     );
 
@@ -197,9 +196,11 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
       timestamp: new Date().toISOString(),
       uptime_seconds: Math.floor((Date.now() - serverStartTime) / 1000),
       pool: {
-        available_keys: cacheStatus.keyCount,
-        cache_status: cacheStatus.cached ? 'cached' : 'not_cached',
-        cache_age_ms: cacheStatus.ageMs,
+        available_keys: keysCacheStatus.keyCount,
+        keys_cache_status: keysCacheStatus.cached ? 'cached' : 'not_cached',
+        keys_cache_age_ms: keysCacheStatus.ageMs,
+        stats_cache_status: statsCacheStatus.cached ? 'cached' : 'not_cached',
+        stats_cache_age_ms: statsCacheStatus.ageMs,
         stats: {
           total_keys: totalKeys,
           blocked_keys: blockedKeys,
@@ -213,132 +214,254 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
     return healthData;
   });
 
+  // Helper functions for request handling
+  async function handleCacheableRequest(
+    request: any,
+    reply: any,
+    provider: any,
+    cacheablePath: any
+  ): Promise<void> {
+    request.log.info({ path: request.url }, 'Cacheable GET path detected');
+    
+    // Check cache first
+    const cached = cacheableResponseCache.get(request);
+    if (cached) {
+      request.log.info({ path: request.url }, 'Cache hit');
+      reply.status(cached.statusCode);
+      Object.entries(cached.headers).forEach(([key, value]) => {
+        reply.header(key, value);
+      });
+      return reply.send(cached.body);
+    }
+    
+    // Cache miss - proxy request with whatever auth they provided
+    request.log.info({ path: request.url }, 'Cache miss - proxying request');
+    
+    const url = `${provider.base_url}${request.url}`;
+    // Filter headers to only string values
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (typeof value === 'string') {
+        headers[key] = value;
+      } else if (Array.isArray(value)) {
+        headers[key] = value.join(', ');
+      }
+    }
+    
+    // Remove hop-by-hop headers and content-encoding (body is decompressed)
+    delete headers['host'];
+    delete headers['connection'];
+    delete headers['keep-alive'];
+    delete headers['transfer-encoding'];
+    delete headers['content-encoding'];
+    
+    // Make request with timeout
+    const timeoutMs = provider.timeout_ms || 60000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      const response = await fetch(url, {
+        method: request.method,
+        headers,
+        body: request.body ? JSON.stringify(request.body) : undefined,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Read response
+      const responseBody = await response.text();
+      let parsedBody: any;
+      try {
+        parsedBody = JSON.parse(responseBody);
+      } catch {
+        parsedBody = responseBody;
+      }
+      
+      // Extract response headers
+      const responseHeaders: Record<string, string> = {};
+      response.headers.forEach((value: string, key: string) => {
+        if (!['connection', 'keep-alive', 'transfer-encoding', 'content-encoding'].includes(key.toLowerCase())) {
+          responseHeaders[key] = value;
+        }
+      });
+      
+      const proxyResponse = {
+        statusCode: response.status,
+        headers: responseHeaders,
+        body: parsedBody,
+      };
+      
+      // Cache if successful
+      if (proxyResponse.statusCode === 200) {
+        cacheableResponseCache.set(request, proxyResponse.statusCode, proxyResponse.headers, proxyResponse.body, cacheablePath.ttl_seconds);
+      }
+      
+      // Send response
+      reply.status(proxyResponse.statusCode);
+      Object.entries(proxyResponse.headers).forEach(([key, value]) => {
+        reply.header(key, value);
+      });
+      return reply.send(proxyResponse.body);
+      
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        return sendError(reply, 504, 'Gateway Timeout', `Request timed out after ${timeoutMs}ms`);
+      }
+      return sendError(reply, 502, 'Bad Gateway', error.message);
+    }
+  }
+
+  async function handleAuthenticatedRequest(
+    request: any,
+    reply: any,
+    provider: any
+  ): Promise<void> {
+    // Extract auth info
+    const authInfo = extractAuthKey(request);
+    if (!authInfo) {
+      return sendError(reply, 401, 'Unauthorized', 'Missing API key in Authorization header');
+    }
+
+    // Check presented key rate limit
+    const rateLimitCheck = keyManager.checkPresentedKeyRateLimit(authInfo.presentedKeyHash);
+    if (!rateLimitCheck.allowed) {
+      return sendError(reply, 429, 'Too Many Requests', rateLimitCheck.reason || 'Rate limit exceeded');
+    }
+
+    // Validate key length
+    const keyLengthValidation = keyValidator.validateKeyLength(authInfo.presentedKey);
+    if (!keyLengthValidation.valid) {
+      return sendError(reply, 400, 'Bad Request', keyLengthValidation.reason || 'Invalid key length');
+    }
+
+    // Extract client IP and subnet
+    const clientIP = extractClientIP(request);
+    const clientSubnet = keyManager.getSubnet(clientIP);
+
+    // If proxy host header is present, validate it matches the configured provider
+    const proxyHost = request.headers['x-forwarded-host'];
+    if (proxyHost && typeof proxyHost === 'string') {
+      const matchedProvider = proxyService.matchProviderByHost(config.providers, proxyHost);
+      
+      // If host matches a provider, it must be the configured one
+      if (!matchedProvider || matchedProvider.name !== provider.name) {
+        return sendError(reply, 400, 'Bad Request', `Proxy host header '${proxyHost}' does not match configured provider '${provider.name}'`);
+      }
+    }
+
+    // Validate request against provider rules
+    const validationResult = keyValidator.validateRequest(
+      provider,
+      request.body,
+      request.url,
+      request.query as Record<string, string>
+    );
+    
+    if (!validationResult.valid) {
+      return sendError(reply, 400, 'Bad Request', validationResult.reason || 'Validation failed');
+    }
+
+    // Check if presented key exists in database
+    let existingKey = keysRepo.findByHash(authInfo.presentedKeyHash);
+    let selectedKey: ApiKey;
+
+    if (!existingKey) {
+      // New key - use presented key directly (no load balancing)
+      request.log.info({ keyHash: authInfo.presentedKeyHash }, 'New key detected - using presented key');
+      selectedKey = {
+        id: -1,
+        key: authInfo.presentedKey,
+        key_hash: authInfo.presentedKeyHash,
+        key_display: generateDisplayKey(authInfo.presentedKey),
+        blocked_until: null,
+        consecutive_auth_failures: 0,
+        consecutive_throttles: 0,
+        last_success_at: null,
+        created_at: Math.floor(Date.now() / 1000),
+        updated_at: Math.floor(Date.now() / 1000),
+      };
+    } else if (existingKey.blocked_until && existingKey.blocked_until > Math.floor(Date.now() / 1000)) {
+      // Key is blocked - use presented key (isolation)
+      request.log.info({ keyHash: authInfo.presentedKeyHash }, 'Blocked key - using presented key');
+      selectedKey = existingKey;
+    } else {
+      // Available key - use load balancing with cached data
+      const availableKeys = keysRepo.getCachedAvailableKeys();
+      const statsMap = statsRepo.getCachedTodayStats();
+      
+      if (availableKeys.length === 0) {
+        return sendError(reply, 503, 'Service Unavailable', 'No available API keys in the pool');
+      }
+
+      // Select best key
+      selectedKey = loadBalancer.selectKey(availableKeys, statsMap, authInfo.presentedKeyHash);
+      request.log.info({ selectedKeyId: selectedKey.id }, 'Load balanced key selected');
+    }
+
+    // Update load balancing stats
+    if (selectedKey.id !== -1) {
+      statsRepo.incrementCallCount(selectedKey.id, clientSubnet);
+    }
+
+    // Forward request to provider
+    const proxyRequest = {
+      method: request.method,
+      path: request.url,
+      headers: request.headers as Record<string, string>,
+      body: request.body,
+      query: request.query as Record<string, string>,
+    };
+
+    const proxyResponse = await proxyService.forwardRequest(
+      provider,
+      selectedKey,
+      proxyRequest
+    );
+
+    // Handle response for key lifecycle management
+    const handlerResult = keyManager.handleResponse(selectedKey, proxyResponse.statusCode);
+    request.log.info({
+      keyId: selectedKey.id,
+      statusCode: proxyResponse.statusCode,
+      action: handlerResult.action,
+      message: handlerResult.message,
+    }, 'Key lifecycle updated');
+
+    // Send response back to client
+    reply.status(proxyResponse.statusCode);
+    Object.entries(proxyResponse.headers).forEach(([key, value]) => {
+      reply.header(key, value);
+    });
+    return reply.send(proxyResponse.body);
+  }
+
   // Main proxy route - handle all requests
   server.all('/*', async (request, reply) => {
     try {
-      // Extract auth info
-      const authInfo = extractAuthKey(request);
-      if (!authInfo) {
-        return sendError(reply, 401, 'Unauthorized', 'Missing API key in Authorization header');
-      }
-
-      // Check presented key rate limit
-      const rateLimitCheck = keyManager.checkPresentedKeyRateLimit(authInfo.presentedKeyHash);
-      if (!rateLimitCheck.allowed) {
-        return sendError(reply, 429, 'Too Many Requests', rateLimitCheck.reason || 'Rate limit exceeded');
-      }
-
-      // Validate key length
-      const keyLengthValidation = keyValidator.validateKeyLength(authInfo.presentedKey);
-      if (!keyLengthValidation.valid) {
-        return sendError(reply, 400, 'Bad Request', keyLengthValidation.reason || 'Invalid key length');
-      }
-
-      // Extract client IP and subnet
-      const clientIP = extractClientIP(request);
-      const clientSubnet = keyManager.getSubnet(clientIP);
-
       // Get configured provider
       const provider = config.providers.find(p => p.name === config.server.provider);
       if (!provider) {
         return sendError(reply, 404, 'Not Found', 'No provider configured');
       }
       
-      // If proxy host header is present, validate it matches the configured provider
-      const proxyHost = request.headers['x-forwarded-host'];
-      if (proxyHost && typeof proxyHost === 'string') {
-        const matchedProvider = proxyService.matchProviderByHost(config.providers, proxyHost);
+      // CHECK: Is this a cacheable path AND a GET request?
+      if (provider.cacheable_paths && request.method === 'GET') {
+        const cacheablePath = provider.cacheable_paths.find((path: any) =>
+          new RegExp(path.path).test(request.url.split('?')[0])
+        );
         
-        // If host matches a provider, it must be the configured one
-        if (!matchedProvider || matchedProvider.name !== provider.name) {
-          return sendError(reply, 400, 'Bad Request', `Proxy host header '${proxyHost}' does not match configured provider '${provider.name}'`);
+        if (cacheablePath) {
+          // CACHEABLE PATH FLOW - Simple proxy + cache (GET only)
+          return handleCacheableRequest(request, reply, provider, cacheablePath);
         }
       }
-
-      // Validate request against provider rules
-      const validationResult = keyValidator.validateRequest(
-        provider,
-        request.body,
-        request.url,
-        request.query as Record<string, string>
-      );
       
-      if (!validationResult.valid) {
-        return sendError(reply, 400, 'Bad Request', validationResult.reason || 'Validation failed');
-      }
-
-      // Check if presented key exists in database
-      let existingKey = keysRepo.findByHash(authInfo.presentedKeyHash);
-      let selectedKey: ApiKey;
-
-      if (!existingKey) {
-        // New key - use presented key directly (no load balancing)
-        request.log.info({ keyHash: authInfo.presentedKeyHash }, 'New key detected - using presented key');
-        selectedKey = {
-          id: -1,
-          key: authInfo.presentedKey,
-          key_hash: authInfo.presentedKeyHash,
-          key_display: generateDisplayKey(authInfo.presentedKey),
-          blocked_until: null,
-          consecutive_auth_failures: 0,
-          consecutive_throttles: 0,
-          last_success_at: null,
-          created_at: Math.floor(Date.now() / 1000),
-          updated_at: Math.floor(Date.now() / 1000),
-        };
-      } else if (existingKey.blocked_until && existingKey.blocked_until > Math.floor(Date.now() / 1000)) {
-        // Key is blocked - use presented key (isolation)
-        request.log.info({ keyHash: authInfo.presentedKeyHash }, 'Blocked key - using presented key');
-        selectedKey = existingKey;
-      } else {
-        // Available key - use load balancing with cached data
-        const cacheEntry = await loadBalancerCache.getCachedLoadBalancerData();
-        
-        if (cacheEntry.availableKeys.length === 0) {
-          return sendError(reply, 503, 'Service Unavailable', 'No available API keys in the pool');
-        }
-
-        // Select best key
-        selectedKey = loadBalancer.selectKey(cacheEntry.availableKeys, cacheEntry.statsMap, authInfo.presentedKeyHash);
-        request.log.info({ selectedKeyId: selectedKey.id }, 'Load balanced key selected');
-      }
-
-      // Update load balancing stats
-      if (selectedKey.id !== -1) {
-        statsRepo.incrementCallCount(selectedKey.id, clientSubnet);
-      }
-
-      // Forward request to provider
-      const proxyRequest = {
-        method: request.method,
-        path: request.url,
-        headers: request.headers as Record<string, string>,
-        body: request.body,
-        query: request.query as Record<string, string>,
-      };
-
-      const proxyResponse = await proxyService.forwardRequest(
-        provider,
-        selectedKey,
-        proxyRequest
-      );
-
-      // Handle response for key lifecycle management
-      const handlerResult = keyManager.handleResponse(selectedKey, proxyResponse.statusCode);
-      request.log.info({
-        keyId: selectedKey.id,
-        statusCode: proxyResponse.statusCode,
-        action: handlerResult.action,
-        message: handlerResult.message,
-      }, 'Key lifecycle updated');
-
-      // Send response back to client
-      reply.status(proxyResponse.statusCode);
-      Object.entries(proxyResponse.headers).forEach(([key, value]) => {
-        reply.header(key, value);
-      });
-      return reply.send(proxyResponse.body);
-
+      // REGULAR AUTHENTICATED FLOW
+      return handleAuthenticatedRequest(request, reply, provider);
+      
     } catch (error: any) {
       request.log.error({ err: error }, 'Proxy error');
       return sendError(reply, 500, 'Internal Server Error', error.message);

@@ -18,12 +18,17 @@ export interface ValidationRule {
   pattern: string;
 }
 
+export interface CacheablePath {
+  path: string;
+  ttl_seconds: number;
+}
+
 export interface ProviderConfig {
   name: string;
   base_url: string;
   timeout_ms?: number;
   auth_header: string;
-  url_patterns: string[];
+  cacheable_paths?: CacheablePath[];
   validation?: ValidationRule[] | ProviderValidation;
 }
 

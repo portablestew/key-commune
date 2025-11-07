@@ -47,7 +47,6 @@ describe('Proxy Integration Tests', () => {
           base_url: 'https://openrouter.ai/api/v1',
           timeout_ms: 60000,
           auth_header: 'Authorization',
-          url_patterns: ['^/api/'],
           validation: {
             min_key_length: 16,
             max_key_length: 256,
