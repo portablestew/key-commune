@@ -12,6 +12,7 @@ import { KeyManager } from './services/key-manager.js';
 import { KeyValidator } from './services/key-validator.js';
 import { ProxyService } from './services/proxy.js';
 import { extractAuthKey, extractClientIP } from './middleware/auth-extractor.js';
+import { createUpstreamHeaders, filterDownstreamHeaders } from './services/header-utils.js';
 import { errorHandler, sendError } from './middleware/error-handler.js';
 import { generateDisplayKey } from './services/encryption.js';
 import { StatsCleanupService } from './services/stats-cleanup.js';
@@ -248,22 +249,8 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
     request.log.info({ path: request.url }, 'Cache miss - proxying request');
     
     const url = new URL(request.url.replace(/^\//, './'), provider.base_url).toString();
-    // Filter headers to only string values
-    const headers: Record<string, string> = {};
-    for (const [key, value] of Object.entries(request.headers)) {
-      if (typeof value === 'string') {
-        headers[key] = value;
-      } else if (Array.isArray(value)) {
-        headers[key] = value.join(', ');
-      }
-    }
-    
-    // Remove hop-by-hop headers and content-encoding (body is decompressed)
-    delete headers['host'];
-    delete headers['connection'];
-    delete headers['keep-alive'];
-    delete headers['transfer-encoding'];
-    delete headers['content-encoding'];
+
+    const headers = createUpstreamHeaders(request.headers);
     
     // Make request with timeout
     const timeoutMs = provider.timeout_ms || 60000;
@@ -289,13 +276,7 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
         parsedBody = responseBody;
       }
       
-      // Extract response headers
-      const responseHeaders: Record<string, string> = {};
-      response.headers.forEach((value: string, key: string) => {
-        if (!['connection', 'keep-alive', 'transfer-encoding', 'content-encoding'].includes(key.toLowerCase())) {
-          responseHeaders[key] = value;
-        }
-      });
+      const responseHeaders = filterDownstreamHeaders(response.headers);
       
       const proxyResponse = {
         statusCode: response.status,
@@ -420,7 +401,10 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
     const proxyRequest = {
       method: request.method,
       path: request.url.replace(/^\//, './'),
-      headers: request.headers as Record<string, string>,
+      headers: createUpstreamHeaders(request.headers, {
+        headerName: provider.auth_header,
+        headerValue: `Bearer ${authInfo.presentedKey}`,
+      }),
       body: request.body,
       query: request.query as Record<string, string>,
     };
@@ -442,7 +426,8 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
     // Send response back to client
     reply.status(proxyResponse.statusCode);
-    Object.entries(proxyResponse.headers).forEach(([key, value]) => {
+    const responseHeaders = filterDownstreamHeaders(new Headers(proxyResponse.headers));
+    Object.entries(responseHeaders).forEach(([key, value]) => {
       reply.header(key, value);
     });
     return reply.send(proxyResponse.body);

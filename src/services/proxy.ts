@@ -1,5 +1,6 @@
 import { ProviderConfig } from '../types/config.js';
 import { ApiKey } from '../types/database.js';
+import { createUpstreamHeaders, filterDownstreamHeaders } from './header-utils.js';
 
 export interface ProxyRequest {
   method: string;
@@ -30,19 +31,11 @@ export class ProxyService {
     // Build full URL
     const url = new URL(request.path, provider.base_url).toString();
      
-    // Prepare headers
-    const headers: Record<string, string> = { ...request.headers };
-    
-    // Remove hop-by-hop headers and content-encoding (body is decompressed)
-    delete headers['host'];
-    delete headers['connection'];
-    delete headers['keep-alive'];
-    delete headers['transfer-encoding'];
-    delete headers['authorization'];
-    delete headers['content-encoding'];
-    
-    // Set the API key in the provider's auth header
-    headers[provider.auth_header] = `Bearer ${apiKey}`;
+    // Prepare sanitized upstream headers with provider auth applied
+    const headers = createUpstreamHeaders(request.headers, {
+      headerName: provider.auth_header,
+      headerValue: `Bearer ${apiKey}`,
+    });
     
     // Make request to provider with timeout
     const timeoutMs = provider.timeout_ms || 60000;
@@ -72,14 +65,8 @@ export class ProxyService {
         parsedBody = responseBody;
       }
       
-      // Extract response headers
-      const responseHeaders: Record<string, string> = {};
-      response.headers.forEach((value: string, key: string) => {
-        // Skip hop-by-hop headers and content-encoding (body is decompressed)
-        if (!['connection', 'keep-alive', 'transfer-encoding', 'content-encoding'].includes(key.toLowerCase())) {
-          responseHeaders[key] = value;
-        }
-      });
+      // Extract response headers using shared helper
+      const responseHeaders = filterDownstreamHeaders(response.headers);
       
       return {
         statusCode: response.status,
