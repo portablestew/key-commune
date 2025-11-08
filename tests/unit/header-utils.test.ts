@@ -88,15 +88,21 @@ describe('createUpstreamHeaders', () => {
     expect(headers['X-Test']).toBe('1');
   });
 
-  it('strips all known auth headers case-insensitively', () => {
-    const headers = createUpstreamHeaders({
-      Authorization: 'Bearer secret',
-      'x-api-key': 'abc',
-      'API-KEY': 'xyz',
-      apikey: 'zzz',
-      'Proxy-Authorization': 'Basic aaa',
-      'X-Other': 'ok',
-    });
+  it('strips all known auth headers case-insensitively when authOverride is provided', () => {
+    const headers = createUpstreamHeaders(
+      {
+        Authorization: 'Bearer secret',
+        'x-api-key': 'abc',
+        'API-KEY': 'xyz',
+        apikey: 'zzz',
+        'Proxy-Authorization': 'Basic aaa',
+        'X-Other': 'ok',
+      },
+      {
+        headerName: 'X-New-Auth',
+        headerValue: 'Bearer new-secret',
+      }
+    );
 
     const keys = Object.keys(headers).map((k) => k.toLowerCase());
     expect(keys).not.toContain('authorization');
@@ -104,6 +110,24 @@ describe('createUpstreamHeaders', () => {
     expect(keys).not.toContain('api-key');
     expect(keys).not.toContain('apikey');
     expect(keys).not.toContain('proxy-authorization');
+    expect(keys).toContain('x-new-auth');
+    expect(headers['X-Other']).toBe('ok');
+    expect(headers['X-New-Auth']).toBe('Bearer new-secret');
+  });
+
+  it('preserves auth headers when no authOverride is provided', () => {
+    const headers = createUpstreamHeaders({
+      Authorization: 'Bearer secret',
+      'x-api-key': 'abc',
+      'X-Other': 'ok',
+    });
+
+    const keys = Object.keys(headers).map((k) => k.toLowerCase());
+    expect(keys).toContain('authorization');
+    expect(keys).toContain('x-api-key');
+    expect(keys).toContain('x-other');
+    expect(headers['Authorization']).toBe('Bearer secret');
+    expect(headers['x-api-key']).toBe('abc');
     expect(headers['X-Other']).toBe('ok');
   });
 
@@ -155,17 +179,25 @@ describe('createUpstreamHeaders', () => {
     expect(Object.keys(headers)).toEqual(['X-Defined']);
   });
 
-  it('handles mixed-case header names for stripping correctly', () => {
-    const headers = createUpstreamHeaders({
-      cOnNeCtIoN: 'keep-alive',
-      'X-API-Key': 'secret',
-      'X-Keep': 'ok',
-    });
+  it('handles mixed-case header names for stripping correctly when authOverride provided', () => {
+    const headers = createUpstreamHeaders(
+      {
+        cOnNeCtIoN: 'keep-alive',
+        'X-API-Key': 'secret',
+        'X-Keep': 'ok',
+      },
+      {
+        headerName: 'Authorization',
+        headerValue: 'Bearer new',
+      }
+    );
 
     const keys = Object.keys(headers).map((k) => k.toLowerCase());
     expect(keys).not.toContain('connection');
     expect(keys).not.toContain('x-api-key');
+    expect(keys).toContain('authorization');
     expect(headers['X-Keep']).toBe('ok');
+    expect(headers['Authorization']).toBe('Bearer new');
   });
 });
 
