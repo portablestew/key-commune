@@ -28,8 +28,8 @@ export class ProxyService {
     const apiKey = selectedKey.key;
     
     // Build full URL
-    const url = `${provider.base_url}${request.path}`;
-    
+    const url = new URL(request.path, provider.base_url).toString();
+     
     // Prepare headers
     const headers: Record<string, string> = { ...request.headers };
     

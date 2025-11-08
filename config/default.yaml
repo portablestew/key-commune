@@ -43,7 +43,7 @@ logging:
 
 providers:
   - name: openai
-    base_url: https://api.openai.com/v1
+    base_url: https://api.openai.com/v1/
     timeout_ms: 60000
     auth_header: Authorization
     validation:
@@ -55,7 +55,7 @@ providers:
         ttl_seconds: 300
 
   - name: anthropic
-    base_url: https://api.anthropic.com/v1
+    base_url: https://api.anthropic.com/v1/
     timeout_ms: 60000
     auth_header: x-api-key
     validation:
@@ -67,7 +67,7 @@ providers:
         ttl_seconds: 300
 
   - name: openrouter
-    base_url: https://openrouter.ai/api/v1
+    base_url: https://openrouter.ai/api/v1/
     timeout_ms: 60000
     auth_header: Authorization
     validation:

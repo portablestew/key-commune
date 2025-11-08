@@ -262,14 +262,18 @@ The sample Key Commune is suitable for agentic coding in Roo Code. To try it out
 
 1. Sign up for OpenRouter and generate a key
     - Create API Key: https://openrouter.ai/settings/keys
-    - Name: any string, e.g. "Free Sample"
-    - Credit limit: **set to 0**
+        - Name: any string, e.g. "Free Sample"
+        - Credit limit: **set to 0**
+    - Update privacy settings: https://openrouter.ai/settings/privacy
+        - Enable free endpoints that may train on inputs
+        - Enable free endpoints that may publish prompts
+        - Note: these setings are a necessary compromise to unlock all available free models
 2. Open: Roo Code settings -> Providers -> Click `+` to Add Profile
     - Name: any string, e.g. "Key Commune (Public)"
     - API Provider: *OpenAI Compatible*
     - Base URL: *https://keycommune.duckdns.org/*
-    - API Key: copy-paste a unique, 0-budgeted OpenRouter API key here
-    - Model: *tngtech/deepseek-r1t2-chimera:free*
+    - API Key: [copy-paste a unique, 0-budgeted OpenRouter API key here]
+    - Model: *tngtech/deepseek-r1t2-chimera:free* (any [popular free model](https://openrouter.ai/models?max_price=0&order=top-weekly))
     - Enable Reasoning Effort: *Medium*
     - Context Window Size: *160000*
     - Image Support: *no*

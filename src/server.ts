@@ -69,6 +69,16 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
 
   const server = Fastify(fastifyOptions);
 
+  // Add path normalization hook to handle double slashes
+  server.addHook('preHandler', (request, reply, done) => {
+    // Normalize double slashes in path (e.g., //models -> /models)
+    if (request.raw.url && request.raw.url.startsWith('//')) {
+      // Replace all leading slashes with single slash
+      request.raw.url = request.raw.url.replace(/^\/+/, '/');
+    }
+    done();
+  });
+
   // Set error handler
   server.setErrorHandler(errorHandler);
 
@@ -237,7 +247,7 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
     // Cache miss - proxy request with whatever auth they provided
     request.log.info({ path: request.url }, 'Cache miss - proxying request');
     
-    const url = `${provider.base_url}${request.url}`;
+    const url = new URL(request.url.replace(/^\//, './'), provider.base_url).toString();
     // Filter headers to only string values
     const headers: Record<string, string> = {};
     for (const [key, value] of Object.entries(request.headers)) {
@@ -409,7 +419,7 @@ export async function createServer(config: AppConfig): Promise<ServerWithCleanup
     // Forward request to provider
     const proxyRequest = {
       method: request.method,
-      path: request.url,
+      path: request.url.replace(/^\//, './'),
       headers: request.headers as Record<string, string>,
       body: request.body,
       query: request.query as Record<string, string>,
