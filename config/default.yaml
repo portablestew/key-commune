@@ -74,7 +74,7 @@ providers:
       custom_rules:
         - type: body-json
           json_key: model
-          regex: ".+:free$|^openrouter/polaris-alpha$"
+          regex: ".+:free$|^openrouter/.+-alpha$"
     cacheable_paths:
       - path: ^/models
         ttl_seconds: 300

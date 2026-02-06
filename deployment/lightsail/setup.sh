@@ -86,7 +86,8 @@ setup_cron() {
     
     # Create cron jobs
     (crontab -l 2>/dev/null; echo "*/15 * * * * curl -k 'https://www.duckdns.org/update?domains=$DUCKDNS_DOMAIN&token=$DUCKDNS_TOKEN&ip=' > /dev/null 2>&1") | crontab -
-    (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet") | crontab -
+    (crontab -l 2>/dev/null; echo "0 5 * * * certbot renew --quiet") | crontab -
+    (crontab -l 2>/dev/null; echo "3 5 * * * /etc/letsencrypt/renewal-hooks/post/copy-certificates.sh $DUCKDNS_DOMAIN") | crontab -
     
     # Setup certbot renewal hook to copy certificates and restart PM2
     # Copy the copy-certificates script verbatim to avoid privilege escalation
